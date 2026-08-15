@@ -1,0 +1,27 @@
+{
+  "name": "smartretail",
+  "private": true,
+  "version": "0.1.0",
+  "description": "SmartRetail — electronics POS system (React + NestJS + Temporal + PostgreSQL)",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "workers/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev:backend": "pnpm --filter backend start:dev",
+    "dev:worker": "pnpm --filter temporal-worker dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "docker:up": "docker compose -f infra/docker/docker-compose.yml up --build",
+    "docker:down": "docker compose -f infra/docker/docker-compose.yml down"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

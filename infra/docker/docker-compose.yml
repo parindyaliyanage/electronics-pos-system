@@ -1,0 +1,78 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: smartretail
+      POSTGRES_PASSWORD: smartretail
+      POSTGRES_DB: smartretail
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=smartretail
+      - POSTGRES_PWD=smartretail
+      - POSTGRES_SEEDS=postgres
+    ports:
+      - "7233:7233"
+    depends_on:
+      - postgres
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.backend
+    env_file:
+      - ../../.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+  temporal-worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.worker
+    env_file:
+      - ../../.env
+    depends_on:
+      - temporal
+      - postgres
+
+volumes:
+  postgres-data:
+  minio-data:

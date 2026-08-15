@@ -1,0 +1,21 @@
+{
+  "name": "temporal-worker",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "ts-node-dev --transpile-only src/worker.ts",
+    "build": "tsc -b",
+    "start": "node dist/worker.js"
+  },
+  "dependencies": {
+    "@temporalio/client": "^1.11.0",
+    "@temporalio/worker": "^1.11.0",
+    "@temporalio/workflow": "^1.11.0",
+    "@temporalio/activity": "^1.11.0"
+  },
+  "devDependencies": {
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0"
+  }
+}

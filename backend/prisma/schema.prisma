@@ -1,0 +1,14 @@
+// Source of truth is docs/schema.sql — this file is generated from it once
+// the schema is stable, then Prisma owns migrations from that point on.
+// See docs/Repo_Architecture.md for the rationale.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Models are translated from docs/schema.sql — not yet generated.

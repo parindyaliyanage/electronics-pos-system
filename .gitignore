@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+frontend/dist/
+backend/dist/
+workers/*/dist/
+
+# Env
+.env
+.env.local
+*.env
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Prisma
+backend/prisma/migrations/dev.db
+
+# Python
+ml-service/**/__pycache__/
+ml-service/**/*.pyc
+ml-service/.venv/
+ml-service/venv/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test/coverage
+coverage/
+
+# Docker
+infra/docker/*.local.yml
