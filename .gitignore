@@ -8,6 +8,7 @@ build/
 frontend/dist/
 backend/dist/
 workers/*/dist/
+*.tsbuildinfo
 
 # Env
 .env

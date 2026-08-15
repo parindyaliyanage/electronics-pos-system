@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+env:
+  # prisma generate only needs a syntactically valid URL, not a reachable DB.
+  DATABASE_URL: postgresql://smartretail:smartretail@localhost:5432/smartretail?schema=public
+
+jobs:
+  lint-typecheck-test:
+    name: Lint, type-check, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Generate Prisma client
+        run: pnpm --filter backend prisma:generate
+
+      - name: Type-check & build
+        run: pnpm -r build
+
+      - name: Unit tests
+        run: pnpm -r test
+
+      - name: Dependency audit (non-blocking)
+        run: pnpm audit --audit-level=high || true
+
+  docker-build:
+    name: Docker build
+    needs: lint-typecheck-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.backend
+          push: false
+          load: true
+          tags: smartretail/backend:ci
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.frontend
+          push: false
+          load: true
+          tags: smartretail/frontend:ci
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Build temporal-worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.worker
+          push: false
+          load: true
+          tags: smartretail/temporal-worker:ci
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+
+      # Publish to GHCR only from main — feature branches just validate the build above.
+      - name: Log in to GitHub Container Registry
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push backend image
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.backend
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/backend:latest
+            ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+          cache-from: type=gha,scope=backend
+
+      - name: Push frontend image
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.frontend
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/frontend:latest
+            ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
+          cache-from: type=gha,scope=frontend
+
+      - name: Push temporal-worker image
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.worker
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/temporal-worker:latest
+            ghcr.io/${{ github.repository }}/temporal-worker:${{ github.sha }}
+          cache-from: type=gha,scope=worker
+
+  # Deploy staging / smoke tests / production deploy are intentionally not
+  # wired up yet — there's no staging or production target configured for
+  # this project. Add a `deploy` job here once one exists (see Section 21 of
+  # the project proposal for the intended shape: Docker containers on a
+  # cloud VM, managed Postgres/object storage).

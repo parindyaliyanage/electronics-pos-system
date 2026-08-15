@@ -89,6 +89,24 @@ To start only the infra services (useful for `pnpm dev:*` above):
 docker compose -f infra/docker/docker-compose.yml up -d postgres redis minio temporal
 ```
 
+## CI/CD
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and
+on pull requests into `main`:
+
+1. **Lint, type-check, test** — `pnpm -r lint`, Prisma client generation,
+   `pnpm -r build` (type-checks frontend/backend/worker), `pnpm -r test`.
+2. **Docker build** — builds all three images (`Dockerfile.backend`,
+   `Dockerfile.frontend`, `Dockerfile.worker`) to catch breakage in the
+   Dockerfiles themselves, independent of the app build. On push to `main`
+   only, it also pushes tagged images to GHCR
+   (`ghcr.io/<repo>/{backend,frontend,temporal-worker}`).
+
+Not wired up yet: integration tests (Postgres/Temporal), workflow tests, and
+deployment (staging/smoke tests/production) — there's no staging or
+production target configured for this project yet. See Section 21 of the
+project proposal for the intended shape once one exists.
+
 ## Optional: ml-service
 
 Not part of the core stack — see [`ml-service/README.md`](ml-service/README.md).
