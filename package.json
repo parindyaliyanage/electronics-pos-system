@@ -16,7 +16,7 @@
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
-    "docker:up": "docker compose -f infra/docker/docker-compose.yml up --build",
+    "docker:up": "docker compose -f infra/docker/docker-compose.yml up -d --build",
     "docker:down": "docker compose -f infra/docker/docker-compose.yml down"
   },
   "engines": {

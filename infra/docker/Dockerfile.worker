@@ -1,0 +1,15 @@
+FROM node:20-bookworm-slim AS build
+WORKDIR /app
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY workers/temporal-worker/package.json workers/temporal-worker/package.json
+RUN corepack enable && pnpm install --frozen-lockfile --filter temporal-worker
+COPY workers/temporal-worker workers/temporal-worker
+RUN pnpm --filter temporal-worker build
+
+FROM node:20-bookworm-slim
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/node_modules node_modules
+COPY --from=build /app/workers/temporal-worker/dist workers/temporal-worker/dist
+COPY --from=build /app/workers/temporal-worker/node_modules workers/temporal-worker/node_modules
+CMD ["node", "workers/temporal-worker/dist/worker.js"]

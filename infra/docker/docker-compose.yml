@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -48,6 +46,11 @@ services:
       dockerfile: infra/docker/Dockerfile.backend
     env_file:
       - ../../.env
+    environment:
+      DATABASE_URL: postgresql://smartretail:smartretail@postgres:5432/smartretail?schema=public
+      REDIS_URL: redis://redis:6379
+      TEMPORAL_ADDRESS: temporal:7233
+      S3_ENDPOINT: http://minio:9000
     ports:
       - "3000:3000"
     depends_on:
@@ -59,7 +62,7 @@ services:
       context: ../..
       dockerfile: infra/docker/Dockerfile.frontend
     ports:
-      - "5173:5173"
+      - "5173:80"
     depends_on:
       - backend
 
@@ -69,6 +72,9 @@ services:
       dockerfile: infra/docker/Dockerfile.worker
     env_file:
       - ../../.env
+    environment:
+      DATABASE_URL: postgresql://smartretail:smartretail@postgres:5432/smartretail?schema=public
+      TEMPORAL_ADDRESS: temporal:7233
     depends_on:
       - temporal
       - postgres
