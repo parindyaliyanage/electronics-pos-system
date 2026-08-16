@@ -1,5 +1,12 @@
 // Translated from docs/schema.sql, which remains the source of truth.
 // Table/column names are mapped back to the original snake_case via @@map/@map.
+//
+// Note: Postgres CHECK constraints in docs/schema.sql (e.g. non-negative prices,
+// the sign-aware stock_movements quantity check, the anomaly_flags
+// exactly-one-subject checks) have no equivalent in the Prisma schema language
+// and are NOT represented here. They are added by hand to the generated
+// migration SQL instead — see the migration's trailing "-- Hand-added CHECK
+// constraints" section. Keep both in sync when editing either.
 
 generator client {
   provider = "prisma-client-js"
@@ -52,6 +59,22 @@ enum PaymentType {
   @@map("payment_type")
 }
 
+enum PaymentFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+
+  @@map("payment_frequency")
+}
+
+enum InstallmentPlanStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+
+  @@map("installment_plan_status")
+}
+
 enum InstallmentScheduleStatus {
   PENDING
   PARTIALLY_PAID
@@ -86,6 +109,38 @@ enum ReportJobStatus {
   @@map("report_job_status")
 }
 
+enum MlModelType {
+  DEMAND_FORECAST
+  INSTALLMENT_RISK
+  ANOMALY_DETECTION
+
+  @@map("ml_model_type")
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+
+  @@map("risk_level")
+}
+
+enum AnomalySeverity {
+  LOW
+  MEDIUM
+  HIGH
+
+  @@map("anomaly_severity")
+}
+
+enum AnomalySubjectType {
+  SALE
+  PAYMENT
+  STOCK_MOVEMENT
+
+  @@map("anomaly_subject_type")
+}
+
 model User {
   id           String   @id @default(uuid()) @db.Uuid
   email        String   @unique
@@ -97,8 +152,25 @@ model User {
   sales          Sale[]
   reportJobs     ReportJob[]
   auditLogs      AuditLog[]
+  loginAttempts  LoginAttempt[]
 
   @@map("users")
+}
+
+// A failed login may use an email with no matching User, so userId is
+// nullable and set to null (never blocked) if that user is later deleted.
+model LoginAttempt {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  email        String
+  successful   Boolean
+  attemptedAt  DateTime @default(now()) @map("attempted_at") @db.Timestamptz
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([email], name: "idx_login_attempts_email")
+  @@index([attemptedAt], name: "idx_login_attempts_attempted_at")
+  @@map("login_attempts")
 }
 
 model Customer {
@@ -134,12 +206,14 @@ model Product {
   lowStockThreshold Int      @default(5) @map("low_stock_threshold")
   active            Boolean  @default(true)
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt         DateTime @default(now()) @map("updated_at") @db.Timestamptz
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  category        Category         @relation(fields: [categoryId], references: [id])
-  stockMovements  StockMovement[]
-  serializedUnits SerializedUnit[]
-  saleItems       SaleItem[]
+  category               Category                 @relation(fields: [categoryId], references: [id])
+  stockMovements         StockMovement[]
+  serializedUnits        SerializedUnit[]
+  saleItems              SaleItem[]
+  demandForecasts        DemandForecast[]
+  reorderRecommendations ReorderRecommendation[]
 
   @@index([categoryId], name: "idx_products_category")
   @@index([active], name: "idx_products_active")
@@ -147,6 +221,8 @@ model Product {
 }
 
 // Ledger: every stock change is a row, never an overwrite of a quantity column.
+// Sign convention (enforced by a hand-added CHECK, see migration.sql):
+// PURCHASE/RETURN positive, SALE/DAMAGED negative, ADJUSTMENT any nonzero.
 model StockMovement {
   id          String            @id @default(uuid()) @db.Uuid
   productId   String            @map("product_id") @db.Uuid
@@ -155,11 +231,14 @@ model StockMovement {
   quantity    Int
   createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz
 
-  product   Product @relation(fields: [productId], references: [id])
-  createdBy User    @relation(fields: [createdById], references: [id])
+  product      Product        @relation(fields: [productId], references: [id])
+  createdBy    User           @relation(fields: [createdById], references: [id])
+  anomalyFlags AnomalyFlag[]
 
   @@index([productId], name: "idx_stock_movements_product")
   @@index([createdById], name: "idx_stock_movements_created_by")
+  @@index([createdAt], name: "idx_stock_movements_created_at")
+  @@index([productId, createdAt], name: "idx_stock_movements_product_created")
   @@map("stock_movements")
 }
 
@@ -170,7 +249,7 @@ model SerializedUnit {
   warrantyStartDate DateTime?            @map("warranty_start_date") @db.Date
   status            SerializedUnitStatus @default(IN_STOCK)
   createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt         DateTime             @default(now()) @map("updated_at") @db.Timestamptz
+  updatedAt         DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   product  Product   @relation(fields: [productId], references: [id])
   saleItem SaleItem?
@@ -192,6 +271,7 @@ model Sale {
   payments        Payment[]
   installmentPlan InstallmentPlan?
   invoices        Invoice[]
+  anomalyFlags    AnomalyFlag[]
 
   @@index([customerId], name: "idx_sales_customer")
   @@index([cashierId], name: "idx_sales_cashier")
@@ -212,7 +292,7 @@ model SaleItem {
 
   sale           Sale            @relation(fields: [saleId], references: [id])
   product        Product         @relation(fields: [productId], references: [id])
-  serializedUnit SerializedUnit? @relation(fields: [serializedUnitId], references: [id])
+  serializedUnit SerializedUnit? @relation(fields: [serializedUnitId], references: [id], onDelete: Restrict)
 
   @@index([saleId], name: "idx_sale_items_sale")
   @@index([productId], name: "idx_sale_items_product")
@@ -227,34 +307,44 @@ model Payment {
   type      PaymentType
   createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz
 
-  sale        Sale                 @relation(fields: [saleId], references: [id])
-  allocations PaymentAllocation[]
+  sale         Sale                @relation(fields: [saleId], references: [id])
+  allocations  PaymentAllocation[]
+  anomalyFlags AnomalyFlag[]
 
   @@index([saleId], name: "idx_payments_sale")
+  @@index([createdAt], name: "idx_payments_created_at")
+  @@index([saleId, createdAt], name: "idx_payments_sale_created")
   @@map("payments")
 }
 
 model InstallmentPlan {
-  id           String   @id @default(uuid()) @db.Uuid
-  saleId       String   @unique @map("sale_id") @db.Uuid // 0 or 1 per sale
-  deposit      Decimal  @db.Decimal(12, 2)
-  interestRate Decimal  @default(0) @map("interest_rate") @db.Decimal(5, 4)
-  termCount    Int      @map("term_count")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id                String                 @id @default(uuid()) @db.Uuid
+  saleId            String                 @unique @map("sale_id") @db.Uuid // 0 or 1 per sale
+  deposit           Decimal                @db.Decimal(12, 2)
+  interestRate      Decimal                @default(0) @map("interest_rate") @db.Decimal(5, 4)
+  termCount         Int                    @map("term_count")
+  paymentFrequency  PaymentFrequency       @default(MONTHLY) @map("payment_frequency")
+  status            InstallmentPlanStatus  @default(ACTIVE)
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  completedAt       DateTime?              @map("completed_at") @db.Timestamptz
+  cancelledAt       DateTime?              @map("cancelled_at") @db.Timestamptz
 
-  sale      Sale                  @relation(fields: [saleId], references: [id])
-  schedules InstallmentSchedule[]
+  sale       Sale                    @relation(fields: [saleId], references: [id])
+  schedules  InstallmentSchedule[]
+  riskScores InstallmentRiskScore[]
 
+  @@index([status], name: "idx_installment_plans_status")
+  @@index([createdAt], name: "idx_installment_plans_created_at")
   @@map("installment_plans")
 }
 
 model InstallmentSchedule {
-  id        String                     @id @default(uuid()) @db.Uuid
-  planId    String                     @map("plan_id") @db.Uuid
-  dueDate   DateTime                   @map("due_date") @db.Date
-  amount    Decimal                    @db.Decimal(12, 2)
-  status    InstallmentScheduleStatus  @default(PENDING)
-  updatedAt DateTime                   @default(now()) @map("updated_at") @db.Timestamptz
+  id        String                    @id @default(uuid()) @db.Uuid
+  planId    String                    @map("plan_id") @db.Uuid
+  dueDate   DateTime                  @map("due_date") @db.Date
+  amount    Decimal                   @db.Decimal(12, 2)
+  status    InstallmentScheduleStatus @default(PENDING)
+  updatedAt DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   plan        InstallmentPlan     @relation(fields: [planId], references: [id])
   allocations PaymentAllocation[]
@@ -262,6 +352,7 @@ model InstallmentSchedule {
   @@index([planId], name: "idx_installment_schedules_plan")
   @@index([dueDate], name: "idx_installment_schedules_due_date")
   @@index([status], name: "idx_installment_schedules_status")
+  @@index([planId, dueDate], name: "idx_installment_schedules_plan_due")
   @@map("installment_schedules")
 }
 
@@ -304,7 +395,7 @@ model ReportJob {
   status        ReportJobStatus @default(QUEUED)
   documentUrl   String?         @map("document_url")
   createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt     DateTime        @default(now()) @map("updated_at") @db.Timestamptz
+  updatedAt     DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   requestedBy User @relation(fields: [requestedById], references: [id])
 
@@ -325,5 +416,127 @@ model AuditLog {
 
   @@index([actorId], name: "idx_audit_logs_actor")
   @@index([entity, entityId], name: "idx_audit_logs_entity")
+  @@index([createdAt], name: "idx_audit_logs_created_at")
   @@map("audit_logs")
+}
+
+// -----------------------------------------------------------------------------
+// ML: model runs, forecasting, reorder recommendations, risk scoring, anomalies
+// -----------------------------------------------------------------------------
+
+// Stores model-training metadata. metrics/parameters hold e.g.
+// {"mae":2.8,"rmse":4.1,"baseline_mae":4.3}.
+model MlModelRun {
+  id                    String      @id @default(uuid()) @db.Uuid
+  modelType             MlModelType @map("model_type")
+  modelName             String      @map("model_name")
+  modelVersion          String      @map("model_version")
+  trainingDataStart     DateTime?   @map("training_data_start") @db.Date
+  trainingDataEnd       DateTime?   @map("training_data_end") @db.Date
+  featureSchemaVersion  String?     @map("feature_schema_version")
+  metrics               Json?       @db.JsonB
+  parameters             Json?      @db.JsonB
+  artifactUri           String?     @map("artifact_uri")
+  trainedAt              DateTime   @default(now()) @map("trained_at") @db.Timestamptz
+
+  demandForecasts       DemandForecast[]
+  installmentRiskScores InstallmentRiskScore[]
+  anomalyFlags          AnomalyFlag[]
+
+  @@unique([modelType, modelVersion])
+  @@index([modelType], name: "idx_ml_model_runs_type")
+  @@index([trainedAt], name: "idx_ml_model_runs_trained_at")
+  @@map("ml_model_runs")
+}
+
+// Input is derivable from sales.created_at / sale_items.{product_id,quantity,
+// unit_price,discount} / products.category_id — the M5-style retail-demand shape.
+model DemandForecast {
+  id              String   @id @default(uuid()) @db.Uuid
+  productId       String   @map("product_id") @db.Uuid
+  modelRunId      String   @map("model_run_id") @db.Uuid
+  forecastDate    DateTime @map("forecast_date") @db.Date
+  horizonDays     Int      @map("horizon_days")
+  predictedUnits  Decimal  @map("predicted_units") @db.Decimal(12, 4)
+  lowerBound      Decimal? @map("lower_bound") @db.Decimal(12, 4)
+  upperBound      Decimal? @map("upper_bound") @db.Decimal(12, 4)
+  generatedAt     DateTime @default(now()) @map("generated_at") @db.Timestamptz
+
+  product                Product                  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  modelRun               MlModelRun               @relation(fields: [modelRunId], references: [id])
+  reorderRecommendations ReorderRecommendation[]
+
+  @@unique([productId, modelRunId, forecastDate, horizonDays])
+  @@index([productId, forecastDate], name: "idx_demand_forecasts_product_date")
+  @@index([generatedAt], name: "idx_demand_forecasts_generated")
+  @@map("demand_forecasts")
+}
+
+// Advisory only — does NOT create stock movements or purchase orders.
+model ReorderRecommendation {
+  id                    String   @id @default(uuid()) @db.Uuid
+  productId             String   @map("product_id") @db.Uuid
+  forecastId            String?  @map("forecast_id") @db.Uuid
+  currentStock          Int      @map("current_stock")
+  forecastDemand        Decimal  @map("forecast_demand") @db.Decimal(12, 4)
+  safetyStock           Int      @map("safety_stock")
+  recommendedQuantity   Int      @map("recommended_quantity")
+  generatedAt           DateTime @default(now()) @map("generated_at") @db.Timestamptz
+
+  product  Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  forecast DemandForecast? @relation(fields: [forecastId], references: [id], onDelete: SetNull)
+
+  @@index([productId], name: "idx_reorder_recommendations_product")
+  @@index([generatedAt], name: "idx_reorder_recommendations_generated")
+  @@map("reorder_recommendations")
+}
+
+// Features are derived from transactional data, not duplicated here —
+// featureSnapshot exists only for reproducibility/explainability.
+model InstallmentRiskScore {
+  id               String    @id @default(uuid()) @db.Uuid
+  planId           String    @map("plan_id") @db.Uuid
+  modelRunId       String    @map("model_run_id") @db.Uuid
+  riskProbability  Decimal   @map("risk_probability") @db.Decimal(6, 5)
+  riskLevel        RiskLevel @map("risk_level")
+  featureSnapshot  Json?     @map("feature_snapshot") @db.JsonB
+  generatedAt      DateTime  @default(now()) @map("generated_at") @db.Timestamptz
+
+  plan     InstallmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  modelRun MlModelRun      @relation(fields: [modelRunId], references: [id])
+
+  @@index([planId], name: "idx_installment_risk_plan")
+  @@index([riskLevel], name: "idx_installment_risk_level")
+  @@index([generatedAt], name: "idx_installment_risk_generated")
+  @@map("installment_risk_scores")
+}
+
+// Advisory only — nothing is automatically blocked/reversed. Exactly one of
+// saleId/paymentId/stockMovementId must be set, matching subjectType; both
+// rules are enforced by hand-added CHECK constraints, see migration.sql.
+model AnomalyFlag {
+  id                String              @id @default(uuid()) @db.Uuid
+  modelRunId        String              @map("model_run_id") @db.Uuid
+  subjectType       AnomalySubjectType  @map("subject_type")
+  saleId            String?             @map("sale_id") @db.Uuid
+  paymentId         String?             @map("payment_id") @db.Uuid
+  stockMovementId   String?             @map("stock_movement_id") @db.Uuid
+  anomalyScore      Decimal             @map("anomaly_score") @db.Decimal(12, 6)
+  severity          AnomalySeverity
+  anomalyType       String              @map("anomaly_type")
+  reason            String?
+  featureSnapshot   Json?               @map("feature_snapshot") @db.JsonB
+  generatedAt       DateTime            @default(now()) @map("generated_at") @db.Timestamptz
+
+  modelRun      MlModelRun     @relation(fields: [modelRunId], references: [id])
+  sale          Sale?          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  payment       Payment?       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  stockMovement StockMovement? @relation(fields: [stockMovementId], references: [id], onDelete: Cascade)
+
+  @@index([saleId], name: "idx_anomaly_flags_sale")
+  @@index([paymentId], name: "idx_anomaly_flags_payment")
+  @@index([stockMovementId], name: "idx_anomaly_flags_stock_movement")
+  @@index([severity], name: "idx_anomaly_flags_severity")
+  @@index([generatedAt], name: "idx_anomaly_flags_generated")
+  @@map("anomaly_flags")
 }
