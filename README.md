@@ -1,94 +1,255 @@
-# SmartRetail — electronics POS system
+# SmartRetail — Electronics POS System
 
-React + NestJS + Temporal + PostgreSQL point-of-sale system with catalog,
-serialized inventory, installment sales, invoicing, reporting, and optional
-ML-driven demand forecasting / risk scoring.
+React + NestJS + Prisma + PostgreSQL + Temporal + Redis + MinIO electronics POS system with catalog management, serialized inventory, installment sales, invoicing, reporting, audit logging, and optional ML services.
 
-See [`docs/Repo_Architecture.md`](docs/Repo_Architecture.md) for the full
-layout and rationale, [`docs/schema.sql`](docs/schema.sql) for the database
-schema, and [`docs/SmartRetail_SRS (2).pdf`](<docs/SmartRetail_SRS (2).pdf>)
-for requirements.
-
-## Status
-
-- Repo scaffolding, Prisma schema (translated from `docs/schema.sql`, 15
-  models), and the full Docker stack are working end to end.
-- **No migration has been run yet** — the schema exists as a file, but the
-  tables don't exist in Postgres until `prisma:migrate` runs (see Setup).
-- Backend modules are empty shells; no controllers/services/guards are
-  implemented yet. FR1 (Auth & RBAC) is the current next step.
+* Architecture: [`docs/Repo_Architecture.md`](docs/Repo_Architecture.md)
+* Database schema: [`docs/schema.sql`](docs/schema.sql)
+* Requirements: [`docs/SmartRetail_SRS (2).pdf`](docs/SmartRetail_SRS %282%29.pdf)
 
 ## Stack
 
-- `frontend/` — React + TypeScript (Vite)
-- `backend/` — NestJS modular monolith + Prisma
-- `workers/temporal-worker/` — Temporal worker process (installment reminders)
-- `ml-service/` — optional Python batch jobs (forecasting, risk scoring)
-- `packages/` — shared types and lint/tsconfig
-- `infra/` — Docker Compose and CI
+* **Frontend:** React + TypeScript + Vite
+* **Backend:** NestJS + Prisma
+* **Database:** PostgreSQL
+* **Workflow:** Temporal
+* **Cache:** Redis
+* **Storage:** MinIO
+* **Containers:** Docker Compose
+* **CI/CD:** GitHub Actions
+* **Package manager:** pnpm 9
 
-## Setup
+---
 
-Prerequisites: Node.js 20+, Docker Desktop.
+## 1. First-Time Setup
 
-```bash
-cp .env.example .env
+```powershell
+Copy-Item .env.example .env                         # Create local environment file
+
+npx pnpm@9.0.0 install                             # Install all workspace dependencies
+
+npx pnpm@9.0.0 docker:up                           # Build and start the complete Docker stack
+
+docker compose -f infra/docker/docker-compose.yml ps   # Check container status
+
+docker compose -f infra/docker/docker-compose.yml exec backend printenv DATABASE_URL
+# Verify DATABASE_URL inside the backend container
+
+docker compose -f infra/docker/docker-compose.yml exec backend node backend/node_modules/prisma/build/index.js migrate deploy --schema backend/prisma/schema.prisma
+# Apply existing Prisma migrations to PostgreSQL
 ```
 
-Install dependencies. If `pnpm` isn't installed globally, `npx pnpm@9`
-works without needing elevated/admin permissions:
+Open:
 
-```bash
-npx pnpm@9 install
+```text
+Frontend       http://localhost:5173
+Backend        http://localhost:3000
+MinIO API      http://localhost:9000
+MinIO Console  http://localhost:9001
 ```
 
-Run the first migration against a running Postgres (see Docker section
-below to start one), then seed:
+---
 
-```bash
-pnpm --filter backend prisma:migrate
-pnpm --filter backend seed
+## 2. Daily Development
+
+```powershell
+pnpm docker:up                                     # Start/build the full stack
+
+docker compose -f infra/docker/docker-compose.yml ps
+# Check that all services are running
+
+docker compose -f infra/docker/docker-compose.yml logs -f backend
+# Follow backend logs
+
+docker compose -f infra/docker/docker-compose.yml down
+# Stop all containers; persistent DB/MinIO volumes are kept
 ```
 
-## Run (dev, services on the host)
+If `pnpm` is not globally available:
 
-Requires the infra containers running (see the last command in the Docker
-section below) with `.env` pointed at `localhost` (the default in
-`.env.example`).
-
-```bash
-pnpm dev:backend     # NestJS API on :3000
-pnpm dev:frontend    # Vite dev server on :5173
-pnpm dev:worker      # Temporal worker
+```powershell
+npx pnpm@9.0.0 docker:up                           # Start/build using pnpm through npx
 ```
 
-## Run (Docker, full stack)
+---
 
-```bash
+## 3. Rebuild After Code Changes
+
+The application source is copied into Docker images, so rebuild the affected service after changing source code.
+
+```powershell
+docker compose -f infra/docker/docker-compose.yml up -d --build backend
+# Rebuild and restart NestJS backend
+
+docker compose -f infra/docker/docker-compose.yml up -d --build frontend
+# Rebuild and restart React frontend
+
+docker compose -f infra/docker/docker-compose.yml up -d --build temporal-worker
+# Rebuild and restart Temporal worker
+
 pnpm docker:up
+# Rebuild/start the complete stack
 ```
 
-Builds and starts all seven services. Inside the Docker network, the
-`backend` and `temporal-worker` containers talk to `postgres`, `redis`,
-`minio`, and `temporal` by service name (overridden in
-`infra/docker/docker-compose.yml`, independent of the host-oriented values
-in `.env.example`).
+---
 
-| Service         | Host port                          |
-| --------------- | ----------------------------------- |
-| frontend         | http://localhost:5173               |
-| backend          | http://localhost:3000               |
-| postgres         | localhost:5432                      |
-| redis            | localhost:6379                      |
-| temporal         | localhost:7233                      |
-| minio            | http://localhost:9000 (console 9001)|
+## 4. Database / Prisma
 
-To start only the infra services (useful for `pnpm dev:*` above):
+### Apply Existing Migrations in Docker
 
-```bash
+```powershell
+docker compose -f infra/docker/docker-compose.yml exec backend node backend/node_modules/prisma/build/index.js migrate deploy --schema backend/prisma/schema.prisma
+# Apply committed migrations to the Docker PostgreSQL database
+```
+
+### Create a New Migration During Development
+
+```powershell
+$env:DATABASE_URL="postgresql://smartretail:smartretail@localhost:5432/smartretail?schema=public"
+# Point host Prisma CLI to PostgreSQL exposed by Docker
+
+pnpm --filter backend prisma:migrate
+# Run `prisma migrate dev` and create a new migration
+```
+
+After creating a migration:
+
+```powershell
+docker compose -f infra/docker/docker-compose.yml up -d --build backend
+# Rebuild backend so the new Prisma files are included
+
+docker compose -f infra/docker/docker-compose.yml exec backend node backend/node_modules/prisma/build/index.js migrate deploy --schema backend/prisma/schema.prisma
+# Apply the migration inside Docker
+```
+
+---
+
+## 5. Useful Docker Commands
+
+```powershell
+docker compose -f infra/docker/docker-compose.yml ps
+# Show services and container status
+
+docker compose -f infra/docker/docker-compose.yml logs -f backend
+# Backend logs
+
+docker compose -f infra/docker/docker-compose.yml logs -f frontend
+# Frontend logs
+
+docker compose -f infra/docker/docker-compose.yml logs -f temporal-worker
+# Temporal worker logs
+
+docker compose -f infra/docker/docker-compose.yml logs -f postgres
+# PostgreSQL logs
+
+docker compose -f infra/docker/docker-compose.yml restart backend
+# Restart only backend
+
+docker compose -f infra/docker/docker-compose.yml exec backend printenv DATABASE_URL
+# Check backend database connection string
+
+docker compose -f infra/docker/docker-compose.yml exec backend ls backend/prisma
+# Verify Prisma schema and migrations exist inside backend container
+
+docker compose -f infra/docker/docker-compose.yml down
+# Stop the complete stack
+```
+
+---
+
+## 6. Run Apps on Host + Infrastructure in Docker
+
+Start only infrastructure:
+
+```powershell
 docker compose -f infra/docker/docker-compose.yml up -d postgres redis minio temporal
+# Start PostgreSQL, Redis, MinIO and Temporal only
 ```
 
-## Optional: ml-service
+Then run applications locally:
 
-Not part of the core stack — see [`ml-service/README.md`](ml-service/README.md).
+```powershell
+pnpm dev:backend                                  # NestJS development server on :3000
+pnpm dev:frontend                                 # Vite development server on :5173
+pnpm dev:worker                                   # Temporal worker in development mode
+```
+
+When running applications on the host, use `localhost` addresses instead of Docker service names.
+
+---
+
+## 7. Service Ports
+
+| Service       | Address                 |
+| ------------- | ----------------------- |
+| Frontend      | `http://localhost:5173` |
+| Backend       | `http://localhost:3000` |
+| PostgreSQL    | `localhost:5432`        |
+| Redis         | `localhost:6379`        |
+| Temporal      | `localhost:7233`        |
+| MinIO API     | `http://localhost:9000` |
+| MinIO Console | `http://localhost:9001` |
+
+Inside Docker, services communicate using:
+
+```text
+postgres:5432
+redis:6379
+temporal:7233
+minio:9000
+```
+
+---
+
+## 8. CI/CD
+
+GitHub Actions workflow:
+
+```text
+.github/workflows/ci.yml
+```
+
+Runs on pushes and pull requests to `main` and performs:
+
+```text
+Install → Lint → Prisma Generate → Build → Test → Docker Build
+```
+
+On pushes to `main`, Docker images can also be pushed to GHCR:
+
+```text
+ghcr.io/<repo>/backend
+ghcr.io/<repo>/frontend
+ghcr.io/<repo>/temporal-worker
+```
+
+Deployment to staging/production is not configured yet.
+
+---
+
+## Quick Reference
+
+```powershell
+# FIRST SETUP
+Copy-Item .env.example .env                        # Create .env
+npx pnpm@9.0.0 install                            # Install dependencies
+npx pnpm@9.0.0 docker:up                          # Build/start everything
+docker compose -f infra/docker/docker-compose.yml exec backend node backend/node_modules/prisma/build/index.js migrate deploy --schema backend/prisma/schema.prisma
+# Apply migrations
+
+# DAILY
+pnpm docker:up                                    # Start/rebuild system
+docker compose -f infra/docker/docker-compose.yml ps
+# Check status
+
+# AFTER BACKEND CHANGES
+docker compose -f infra/docker/docker-compose.yml up -d --build backend
+
+# AFTER FRONTEND CHANGES
+docker compose -f infra/docker/docker-compose.yml up -d --build frontend
+
+# LOGS
+docker compose -f infra/docker/docker-compose.yml logs -f backend
+
+# STOP
+docker compose -f infra/docker/docker-compose.yml down
+```
