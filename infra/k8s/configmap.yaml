@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smartretail-config
+  namespace: smartretail
+data:
+  REDIS_URL: redis://redis:6379
+  TEMPORAL_ADDRESS: temporal:7233
+  TEMPORAL_NAMESPACE: default
+  TEMPORAL_TASK_QUEUE: smartretail-installments
+  S3_ENDPOINT: http://minio:9000
+  S3_BUCKET: smartretail
+  PORT: "3000"
+  NODE_ENV: production
+  JWT_EXPIRES_IN: 8h

@@ -1,0 +1,34 @@
+# Replace both hostnames with your real domain(s) once one exists.
+# Frontend and backend get separate hosts (rather than one host with
+# path-based routing) because the backend has no route prefix, so
+# path-stripping would need extra rewrite rules for no real benefit.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: smartretail
+  namespace: smartretail
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: smartretail.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+    - host: api.smartretail.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 3000
