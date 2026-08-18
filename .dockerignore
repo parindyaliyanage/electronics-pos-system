@@ -2,6 +2,7 @@
 **/dist
 **/build
 **/.turbo
+**/*.tsbuildinfo
 .git
 .gitignore
 .env
