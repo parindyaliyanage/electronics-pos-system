@@ -13,15 +13,15 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "prisma db seed"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.0",
-    "@nestjs/core": "^10.4.0",
-    "@nestjs/platform-express": "^10.4.0",
     "@nestjs/config": "^3.2.0",
+    "@nestjs/core": "^10.4.0",
     "@nestjs/jwt": "^10.2.0",
-    "@nestjs/passport": "^10.0.0",
+    "@nestjs/passport": "^10.0.3",
+    "@nestjs/platform-express": "^10.4.0",
     "@prisma/client": "^5.18.0",
     "bcrypt": "^5.1.1",
     "class-transformer": "^0.5.1",
@@ -48,14 +48,23 @@
     "ts-node": "^10.9.0",
     "typescript": "^5.5.0"
   },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "jest": {
-    "moduleFileExtensions": ["js", "json", "ts"],
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
-    "collectCoverageFrom": ["**/*.(t|j)s"],
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
   }

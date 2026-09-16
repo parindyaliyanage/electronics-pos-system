@@ -94,6 +94,74 @@ pnpm docker:up
 
 ## 4. Database / Prisma
 
+### Seed Authentication Users
+
+Set `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_WORKER_EMAIL`, and
+`SEED_WORKER_PASSWORD` in `backend/.env`, then run:
+
+```powershell
+pnpm --filter backend seed
+```
+
+The command is idempotent: it creates the two users on the first run and
+updates their bcrypt password hashes and roles on later runs.
+
+### Authentication API
+
+```text
+POST /auth/login   Public; returns a signed Bearer JWT
+GET  /auth/me      Requires a valid, unexpired JWT
+POST /auth/logout  Requires JWT; the client then deletes its token
+GET  /users        Administrator only
+```
+
+Send protected requests with `Authorization: Bearer <accessToken>`. JWT expiry
+is controlled by `JWT_EXPIRES_IN` and defaults to 8 hours.
+
+### Catalog and Inventory API (FR2)
+
+All routes require a Bearer JWT. Administrator-only mutations are enforced by
+the backend role guard.
+
+```text
+GET    /categories                         Administrator, Worker
+POST   /categories                         Administrator
+PATCH  /categories/:id                     Administrator
+PATCH  /categories/:id/deactivate          Administrator
+
+GET    /products                           Administrator, Worker
+GET    /products/:id                       Administrator, Worker
+POST   /products                           Administrator
+PATCH  /products/:id                       Administrator
+PATCH  /products/:id/deactivate            Administrator
+
+GET    /inventory/movements                Administrator
+POST   /inventory/movements                Administrator
+GET    /inventory/serialized-units         Administrator, Worker
+POST   /inventory/serialized-units         Administrator
+```
+
+Product search accepts `search`, `categoryId`, `active`, `page`, and `limit`.
+The `search` value matches product name, category name, or serial number. Every
+product response includes ledger-derived `currentStock` and `lowStock` values.
+
+### POS Checkout API (FR3)
+
+```text
+POST /sales/checkout   Administrator, Worker
+GET  /sales/:id        Administrator; Worker who created that sale
+```
+
+`POST /sales/checkout` requires an `Idempotency-Key` HTTP header containing a
+new UUID for each checkout attempt. The request validates the customer,
+products, displayed catalog prices, discounts, stock, and selected serialized
+units. Sale items, full payment, SALE stock movements, serialized-unit status,
+and the sale audit record commit in one serializable transaction.
+
+Only `FULL` checkout is enabled until FR5 adds installment plan and schedule
+details. `DEPOSIT` is rejected rather than creating an incomplete installment
+sale. Invoice generation remains the FR7 follow-up step.
+
 ### Apply Existing Migrations in Docker
 
 ```powershell
@@ -104,7 +172,7 @@ docker compose -f infra/docker/docker-compose.yml exec backend node backend/node
 ### Create a New Migration During Development
 
 ```powershell
-$env:DATABASE_URL="postgresql://smartretail:smartretail@localhost:5432/smartretail?schema=public"
+$env:DATABASE_URL="postgresql://smartretail:smartretail@localhost:5433/smartretail?schema=public"
 # Point host Prisma CLI to PostgreSQL exposed by Docker
 
 pnpm --filter backend prisma:migrate
@@ -183,7 +251,7 @@ When running applications on the host, use `localhost` addresses instead of Dock
 | ------------- | ----------------------- |
 | Frontend      | `http://localhost:5173` |
 | Backend       | `http://localhost:3000` |
-| PostgreSQL    | `localhost:5432`        |
+| PostgreSQL    | `localhost:5433`        |
 | Redis         | `localhost:6379`        |
 | Temporal      | `localhost:7233`        |
 | MinIO API     | `http://localhost:9000` |
