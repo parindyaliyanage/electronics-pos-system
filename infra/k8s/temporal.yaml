@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal
+  namespace: smartretail
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal
+  template:
+    metadata:
+      labels:
+        app: temporal
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done
+      containers:
+        - name: temporal
+          image: temporalio/auto-setup:latest
+          ports:
+            - containerPort: 7233
+          env:
+            - name: DB
+              value: postgres12
+            - name: DB_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: smartretail
+            - name: POSTGRES_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: smartretail-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_SEEDS
+              value: postgres
+          readinessProbe:
+            tcpSocket:
+              port: 7233
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal
+  namespace: smartretail
+spec:
+  selector:
+    app: temporal
+  ports:
+    - port: 7233

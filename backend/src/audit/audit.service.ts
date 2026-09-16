@@ -1,3 +1,4 @@
+
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -15,3 +16,4 @@ export class AuditService {
     return this.record(actorId, "AUTHORIZATION_DENIED", "AUTHORIZATION");
   }
 }
+

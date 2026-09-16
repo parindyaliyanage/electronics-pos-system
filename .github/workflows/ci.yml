@@ -4,7 +4,7 @@ on:
   push:
     branches: ["**"]
   pull_request:
-    branches: [main]
+    branches: [main, development]
 
 env:
   # prisma generate only needs a syntactically valid URL, not a reachable DB.
@@ -115,6 +115,8 @@ jobs:
           context: .
           file: infra/docker/Dockerfile.frontend
           push: true
+          build-args: |
+            VITE_API_BASE_URL=${{ vars.PUBLIC_API_URL || 'https://api.smartretail.example.com' }}
           tags: |
             ghcr.io/${{ github.repository }}/frontend:latest
             ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
@@ -132,8 +134,86 @@ jobs:
             ghcr.io/${{ github.repository }}/temporal-worker:${{ github.sha }}
           cache-from: type=gha,scope=worker
 
-  # Deploy staging / smoke tests / production deploy are intentionally not
-  # wired up yet — there's no staging or production target configured for
-  # this project. Add a `deploy` job here once one exists (see Section 21 of
-  # the project proposal for the intended shape: Docker containers on a
-  # cloud VM, managed Postgres/object storage).
+  deploy:
+    name: Deploy to Kubernetes
+    needs: docker-build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No cluster exists yet — this job is prep only. Once one does, add the
+      # KUBE_CONFIG (base64 kubeconfig), GHCR_PAT (a PAT with read:packages,
+      # since GITHUB_TOKEN expires and can't be used as a long-lived pull
+      # secret), DB_PASSWORD, JWT_SECRET, S3_ACCESS_KEY and S3_SECRET_KEY repo
+      # secrets, and set the PUBLIC_API_URL repo variable to your real API
+      # hostname. Until KUBE_CONFIG is set, every step below is skipped.
+      - name: Check cluster access is configured
+        id: check
+        run: |
+          if [ -n "${{ secrets.KUBE_CONFIG }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::KUBE_CONFIG secret not set — skipping deploy. See comment above this step for the secrets a real cluster needs."
+          fi
+
+      - uses: azure/setup-kubectl@v4
+        if: steps.check.outputs.configured == 'true'
+
+      - uses: imranismail/setup-kustomize@v2
+        if: steps.check.outputs.configured == 'true'
+
+      - name: Write kubeconfig
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Ensure namespace exists
+        if: steps.check.outputs.configured == 'true'
+        run: kubectl apply -f infra/k8s/namespace.yaml
+
+      - name: Sync GHCR image pull secret
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          kubectl create secret docker-registry ghcr-pull-secret \
+            -n smartretail \
+            --docker-server=ghcr.io \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GHCR_PAT }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Sync application secrets
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          kubectl create secret generic smartretail-secrets \
+            -n smartretail \
+            --from-literal=DATABASE_URL="postgresql://smartretail:${{ secrets.DB_PASSWORD }}@postgres:5432/smartretail?schema=public" \
+            --from-literal=POSTGRES_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+            --from-literal=JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+            --from-literal=S3_ACCESS_KEY="${{ secrets.S3_ACCESS_KEY }}" \
+            --from-literal=S3_SECRET_KEY="${{ secrets.S3_SECRET_KEY }}" \
+            --from-literal=MINIO_ROOT_USER="${{ secrets.S3_ACCESS_KEY }}" \
+            --from-literal=MINIO_ROOT_PASSWORD="${{ secrets.S3_SECRET_KEY }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Set image tags
+        if: steps.check.outputs.configured == 'true'
+        working-directory: infra/k8s
+        run: |
+          kustomize edit set image \
+            smartretail/backend=ghcr.io/${{ github.repository }}/backend:${{ github.sha }} \
+            smartretail/frontend=ghcr.io/${{ github.repository }}/frontend:${{ github.sha }} \
+            smartretail/temporal-worker=ghcr.io/${{ github.repository }}/temporal-worker:${{ github.sha }}
+
+      - name: Apply manifests
+        if: steps.check.outputs.configured == 'true'
+        run: kubectl apply -k infra/k8s
+
+      - name: Wait for rollout
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          kubectl rollout status deployment/backend -n smartretail --timeout=180s
+          kubectl rollout status deployment/frontend -n smartretail --timeout=180s
+          kubectl rollout status deployment/temporal-worker -n smartretail --timeout=180s
