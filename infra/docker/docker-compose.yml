@@ -6,7 +6,8 @@ services:
       POSTGRES_PASSWORD: smartretail
       POSTGRES_DB: smartretail
     ports:
-      - "5432:5432"
+      # Use 5433 on the host to avoid clashing with a locally installed PostgreSQL.
+      - "5433:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 

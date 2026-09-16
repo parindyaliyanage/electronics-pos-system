@@ -171,8 +171,12 @@ CREATE INDEX idx_customers_phone
 
 CREATE TABLE categories (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name            TEXT NOT NULL UNIQUE
+    name            TEXT NOT NULL UNIQUE,
+    active          BOOLEAN NOT NULL DEFAULT TRUE
 );
+
+CREATE INDEX idx_categories_active
+    ON categories(active);
 
 
 CREATE TABLE products (
@@ -292,6 +296,8 @@ CREATE INDEX idx_serialized_units_status
 
 CREATE TABLE sales (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    idempotency_key UUID NOT NULL UNIQUE,
 
     customer_id     UUID NOT NULL
                     REFERENCES customers(id)
