@@ -297,6 +297,8 @@ CREATE INDEX idx_serialized_units_status
 CREATE TABLE sales (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
+    idempotency_key UUID NOT NULL UNIQUE,
+
     customer_id     UUID NOT NULL
                     REFERENCES customers(id)
                     ON DELETE RESTRICT,

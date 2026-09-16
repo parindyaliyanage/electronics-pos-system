@@ -145,6 +145,23 @@ Product search accepts `search`, `categoryId`, `active`, `page`, and `limit`.
 The `search` value matches product name, category name, or serial number. Every
 product response includes ledger-derived `currentStock` and `lowStock` values.
 
+### POS Checkout API (FR3)
+
+```text
+POST /sales/checkout   Administrator, Worker
+GET  /sales/:id        Administrator; Worker who created that sale
+```
+
+`POST /sales/checkout` requires an `Idempotency-Key` HTTP header containing a
+new UUID for each checkout attempt. The request validates the customer,
+products, displayed catalog prices, discounts, stock, and selected serialized
+units. Sale items, full payment, SALE stock movements, serialized-unit status,
+and the sale audit record commit in one serializable transaction.
+
+Only `FULL` checkout is enabled until FR5 adds installment plan and schedule
+details. `DEPOSIT` is rejected rather than creating an incomplete installment
+sale. Invoice generation remains the FR7 follow-up step.
+
 ### Apply Existing Migrations in Docker
 
 ```powershell
