@@ -162,6 +162,23 @@ Only `FULL` checkout is enabled until FR5 adds installment plan and schedule
 details. `DEPOSIT` is rejected rather than creating an incomplete installment
 sale. Invoice generation remains the FR7 follow-up step.
 
+### Customer API (FR4)
+
+```text
+POST /customers              Administrator, Worker
+GET  /customers              Administrator, Worker
+GET  /customers/:id          Administrator, Worker
+GET  /customers/:id/history  Administrator, Worker
+```
+
+Customer registration requires `fullName` and `phone`; `email` and `address`
+are optional. Phone formatting is normalized before storage. A matching phone
+produces a `DUPLICATE_PHONE` warning but does not block registration, as
+required by the SRS. `GET /customers` accepts `search`, `page`, and `limit` and
+matches names or phone numbers. History includes sales, items, payments,
+serialized units, invoices, installment plans/schedules, and derived paid and
+outstanding totals.
+
 ### Apply Existing Migrations in Docker
 
 ```powershell
