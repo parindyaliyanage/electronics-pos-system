@@ -148,11 +148,12 @@ model User {
   role         UserRole
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  stockMovements StockMovement[]
-  sales          Sale[]
-  reportJobs     ReportJob[]
-  auditLogs      AuditLog[]
-  loginAttempts  LoginAttempt[]
+  stockMovements             StockMovement[]
+  sales                      Sale[]
+  reportJobs                 ReportJob[]
+  auditLogs                  AuditLog[]
+  loginAttempts              LoginAttempt[]
+  installmentPoliciesUpdated InstallmentPolicy[]
 
   @@map("users")
 }
@@ -318,6 +319,19 @@ model Payment {
   @@index([createdAt], name: "idx_payments_created_at")
   @@index([saleId, createdAt], name: "idx_payments_sale_created")
   @@map("payments")
+}
+
+// Singleton business policy used when new installment plans are created.
+// Existing plans retain their own interestRate snapshot when this changes.
+model InstallmentPolicy {
+  id           String   @id @default(uuid()) @db.Uuid
+  interestRate Decimal  @map("interest_rate") @db.Decimal(5, 4)
+  updatedById  String   @map("updated_by") @db.Uuid
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  updatedBy User @relation(fields: [updatedById], references: [id])
+
+  @@map("installment_policy")
 }
 
 model InstallmentPlan {

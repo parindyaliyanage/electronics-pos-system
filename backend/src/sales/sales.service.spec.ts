@@ -1,5 +1,5 @@
 import { ConflictException } from "@nestjs/common";
-import { PaymentMethod, PaymentType, Prisma, SerializedUnitStatus } from "@prisma/client";
+import { PaymentFrequency, PaymentMethod, PaymentType, Prisma, SerializedUnitStatus } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import type { CheckoutDto } from "./dto/checkout.dto";
 import { SalesService } from "./sales.service";
@@ -17,6 +17,9 @@ describe("SalesService", () => {
     serializedUnit: { findMany: jest.fn(), updateMany: jest.fn() },
     saleItem: { create: jest.fn() },
     payment: { create: jest.fn() },
+    installmentPolicy: { findUnique: jest.fn() },
+    installmentPlan: { create: jest.fn() },
+    installmentSchedule: { create: jest.fn() },
     auditLog: { create: jest.fn() },
   };
   const saleFindUnique = jest.fn();
@@ -52,6 +55,9 @@ describe("SalesService", () => {
     tx.saleItem.create.mockResolvedValue({ id: "item-1" });
     tx.stockMovement.create.mockResolvedValue({ id: "movement-1" });
     tx.payment.create.mockResolvedValue({ id: "payment-1", amount: new Prisma.Decimal(180) });
+    tx.installmentPolicy.findUnique.mockResolvedValue({ interestRate: new Prisma.Decimal("0.10") });
+    tx.installmentPlan.create.mockResolvedValue({ id: "plan-1" });
+    tx.installmentSchedule.create.mockResolvedValue({});
     tx.auditLog.create.mockResolvedValue({});
     tx.sale.findUniqueOrThrow.mockResolvedValue({
       id: "sale-1",
@@ -105,15 +111,31 @@ describe("SalesService", () => {
     expect(tx.sale.create).not.toHaveBeenCalled();
   });
 
-  it("rejects deposits until FR5 can create the plan and schedule", async () => {
+  it("creates an installment plan and schedule for a deposit checkout", async () => {
     const depositCheckout: CheckoutDto = {
       ...checkout,
       payment: { method: PaymentMethod.CASH, type: PaymentType.DEPOSIT, amount: 50 },
+      installment: { termCount: 3, paymentFrequency: PaymentFrequency.MONTHLY },
     };
+    tx.payment.create.mockResolvedValue({ id: "payment-1", amount: new Prisma.Decimal(50) });
 
-    await expect(service.checkout(depositCheckout, cashierId, idempotencyKey))
-      .rejects.toThrow("requires FR5 plan and schedule details");
-    expect(tx.sale.create).not.toHaveBeenCalled();
+    await service.checkout(depositCheckout, cashierId, idempotencyKey);
+
+    expect(tx.installmentPlan.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        saleId: "sale-1",
+        deposit: new Prisma.Decimal(50),
+        interestRate: new Prisma.Decimal("0.10"),
+        termCount: 3,
+        paymentFrequency: PaymentFrequency.MONTHLY,
+      }),
+    });
+    expect(tx.installmentSchedule.create).toHaveBeenCalledTimes(3);
+    const scheduledTotal = tx.installmentSchedule.create.mock.calls.reduce(
+      (sum, [call]) => sum.plus(call.data.amount),
+      new Prisma.Decimal(0),
+    );
+    expect(scheduledTotal.equals(143)).toBe(true);
   });
 
   it("sells a selected serialized unit and deducts exactly one", async () => {

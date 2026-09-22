@@ -391,6 +391,15 @@ CREATE INDEX idx_payments_sale_created
 -- INSTALLMENT PLANS
 -- =============================================================================
 
+-- Singleton policy row. New plans snapshot this rate so later policy changes
+-- do not rewrite historical installment agreements.
+CREATE TABLE installment_policy (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    interest_rate   NUMERIC(5,4) NOT NULL CHECK (interest_rate >= 0 AND interest_rate <= 1),
+    updated_by      UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE installment_plans (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 

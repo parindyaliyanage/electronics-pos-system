@@ -97,14 +97,16 @@ pnpm docker:up
 ### Seed Authentication Users
 
 Set `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_WORKER_EMAIL`, and
-`SEED_WORKER_PASSWORD` in `backend/.env`, then run:
+`SEED_WORKER_PASSWORD` in `backend/.env`. Optionally set
+`SEED_INSTALLMENT_INTEREST_RATE` (for example, `0.1000` means 10%), then run:
 
 ```powershell
 pnpm --filter backend seed
 ```
 
-The command is idempotent: it creates the two users on the first run and
-updates their bcrypt password hashes and roles on later runs.
+The command is idempotent: it creates the two users and default installment
+policy on the first run. Later runs update the users but preserve an
+administrator-configured installment rate.
 
 ### Authentication API
 
@@ -158,9 +160,29 @@ products, displayed catalog prices, discounts, stock, and selected serialized
 units. Sale items, full payment, SALE stock movements, serialized-unit status,
 and the sale audit record commit in one serializable transaction.
 
-Only `FULL` checkout is enabled until FR5 adds installment plan and schedule
-details. `DEPOSIT` is rejected rather than creating an incomplete installment
-sale. Invoice generation remains the FR7 follow-up step.
+`FULL` checkout requires the full grand total. A `DEPOSIT` checkout also
+requires `installment.termCount` and `installment.paymentFrequency`; it creates
+the plan and schedule atomically using the current administrator policy.
+Invoice generation remains the FR7 follow-up step.
+
+### Installment API (FR5)
+
+```text
+GET   /installments/policy         Administrator, Worker
+PUT   /installments/policy         Administrator
+GET   /installments                Administrator, Worker
+GET   /installments/:id            Administrator, Worker
+POST  /installments/:id/payments   Administrator, Worker
+PATCH /installments/:id/cancel     Administrator
+```
+
+Plan list filters are `customerId`, `status`, `page`, and `limit`. The interest
+rate is a decimal fraction (`0.10` means 10%) and is copied into each new plan,
+so later policy changes do not alter existing agreements. Payment allocations
+support partial payment and carry over an overpayment to following schedules.
+Plan responses derive `outstandingBalance`, `nextDueDate`, and `nextAmountDue`
+from the allocation ledger. Cancellation retains the plan, schedules,
+payments, and an audit entry instead of deleting history.
 
 ### Customer API (FR4)
 
