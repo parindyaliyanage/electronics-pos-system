@@ -1,6 +1,5 @@
 import { PaymentFrequency, Prisma } from "@prisma/client";
 import { calculateInstallmentSchedule } from "./installment-calculator";
-import { describe, it } from "node:test";
 
 describe("calculateInstallmentSchedule", () => {
   it("adds simple interest and puts rounding remainder in the last installment", () => {
