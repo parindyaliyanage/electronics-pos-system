@@ -13,8 +13,11 @@ import {
   UserRole,
 } from "@prisma/client";
 import type { AuthenticatedUser } from "../auth/auth.types";
+import { calculateInstallmentSchedule } from "../installments/installment-calculator";
+import { INSTALLMENT_POLICY_ID } from "../installments/installment.constants";
 import { PrismaService } from "../prisma/prisma.service";
 import type { CheckoutDto } from "./dto/checkout.dto";
+import type { CheckoutInstallmentDto } from "./dto/checkout-installment.dto";
 import type { CheckoutItemDto } from "./dto/checkout-item.dto";
 
 const saleInclude = {
@@ -27,6 +30,7 @@ const saleInclude = {
     },
   },
   payments: true,
+  installmentPlan: { include: { schedules: { orderBy: { dueDate: "asc" } } } },
 } as const;
 
 @Injectable()
@@ -70,7 +74,8 @@ export class SalesService {
           new Prisma.Decimal(0),
         );
         const grandTotal = subtotal.minus(totalDiscount);
-        this.validatePayment(input.payment.type, new Prisma.Decimal(input.payment.amount), grandTotal);
+        const paymentAmount = new Prisma.Decimal(input.payment.amount);
+        this.validatePayment(input.payment.type, paymentAmount, grandTotal, input.installment);
 
         const sale = await tx.sale.create({
           data: {
@@ -124,6 +129,38 @@ export class SalesService {
             type: input.payment.type,
           },
         });
+
+        if (input.payment.type === PaymentType.DEPOSIT) {
+          const policy = await tx.installmentPolicy.findUnique({
+            where: { id: INSTALLMENT_POLICY_ID },
+          });
+          if (!policy) {
+            throw new BadRequestException(
+              "Installment policy is not configured by an Administrator",
+            );
+          }
+          const financedAmount = grandTotal.minus(paymentAmount);
+          const calculation = calculateInstallmentSchedule(
+            financedAmount,
+            policy.interestRate,
+            input.installment!.termCount,
+            input.installment!.paymentFrequency,
+          );
+          const plan = await tx.installmentPlan.create({
+            data: {
+              saleId: sale.id,
+              deposit: paymentAmount,
+              interestRate: policy.interestRate,
+              termCount: input.installment!.termCount,
+              paymentFrequency: input.installment!.paymentFrequency,
+            },
+          });
+          for (const schedule of calculation.schedules) {
+            await tx.installmentSchedule.create({
+              data: { planId: plan.id, ...schedule },
+            });
+          }
+        }
         await tx.auditLog.create({
           data: {
             actorId: cashierId,
@@ -237,17 +274,28 @@ export class SalesService {
     }
   }
 
-  private validatePayment(type: PaymentType, amount: Prisma.Decimal, grandTotal: Prisma.Decimal) {
+  private validatePayment(
+    type: PaymentType,
+    amount: Prisma.Decimal,
+    grandTotal: Prisma.Decimal,
+    installment?: CheckoutInstallmentDto,
+  ) {
     if (grandTotal.lessThanOrEqualTo(0)) {
       throw new BadRequestException("Sale grand total must be greater than zero");
     }
     if (type === PaymentType.FULL && !amount.equals(grandTotal)) {
       throw new BadRequestException("Full payment amount must equal the grand total");
     }
+    if (type === PaymentType.FULL && installment) {
+      throw new BadRequestException("Full payment checkout cannot include installment details");
+    }
     if (type === PaymentType.DEPOSIT) {
-      throw new BadRequestException(
-        "Installment checkout requires FR5 plan and schedule details",
-      );
+      if (!installment) {
+        throw new BadRequestException("Deposit checkout requires installment details");
+      }
+      if (amount.lessThanOrEqualTo(0) || amount.greaterThanOrEqualTo(grandTotal)) {
+        throw new BadRequestException("Deposit must be greater than zero and less than the grand total");
+      }
     }
     if (type === PaymentType.INSTALLMENT) {
       throw new BadRequestException("INSTALLMENT payments are recorded through FR5, not checkout");
