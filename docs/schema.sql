@@ -85,7 +85,13 @@ CREATE TYPE report_job_status AS ENUM (
     'QUEUED',
     'GENERATING',
     'COMPLETED',
-    'FAILED'
+    'FAILED',
+    'EXPIRED'      -- FR8: retention period passed, file deleted
+);
+
+CREATE TYPE report_format AS ENUM (
+    'PDF',
+    'CSV'
 );
 
 
@@ -578,14 +584,29 @@ CREATE TABLE report_jobs (
 
     type            report_job_type NOT NULL,
 
+    format          report_format NOT NULL DEFAULT 'PDF',   -- FR8: PDF | CSV
+
+    filters         JSONB NOT NULL DEFAULT '{}',            -- FR8: date range, category, ...
+
     status          report_job_status
                     NOT NULL DEFAULT 'QUEUED',
 
+    -- Object-storage key of the generated file once COMPLETED.
     document_url    TEXT,
+    file_name       TEXT,
+    error_message   TEXT,                                   -- set when FAILED
+    attempts        INTEGER NOT NULL DEFAULT 0,
+    started_at      TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ,
+    expires_at      TIMESTAMPTZ,                            -- retention end
 
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- FR8: the background worker claims the oldest QUEUED job.
+CREATE INDEX idx_report_jobs_status_created
+    ON report_jobs(status, created_at);
 
 CREATE INDEX idx_report_jobs_requested_by
     ON report_jobs(requested_by);

@@ -1,5 +1,6 @@
 import {
   CreateBucketCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
@@ -9,7 +10,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
 /**
- * FR7 — stores generated PDFs in S3-compatible object storage (MinIO in
+ * FR7/FR8 — stores generated PDFs and report files in S3-compatible object storage (MinIO in
  * development). Objects are private; downloads are streamed through the API
  * so access control stays in one place.
  */
@@ -47,6 +48,10 @@ export class DocumentStorageService {
     const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
     if (!result.Body) throw new Error(`Stored document ${key} is empty`);
     return Buffer.from(await result.Body.transformToByteArray());
+  }
+
+  async delete(key: string) {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
   private ensureBucket() {
