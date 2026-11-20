@@ -1,6 +1,7 @@
 // FR3 — checkout / point of sale
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { errorMessage } from "../api/client";
 import { checkout, getInstallmentPolicy, getProduct, inStockUnits } from "../api/pos";
 import type { CheckoutRequest, CheckoutResponse, Customer, InstallmentPolicy, Product, SerializedUnit } from "../api/types";
@@ -54,6 +55,17 @@ export default function PosPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [completed, setCompleted] = useState<{ sale: CheckoutResponse; change: number | null } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // "New sale for this customer" on the customer page.
+  useEffect(() => {
+    const passed = (location.state as { customer?: Customer } | null)?.customer;
+    if (!passed) return;
+    setCompleted(null);
+    setCustomer(passed);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, navigate]);
 
   /**
    * One idempotency key per sale attempt. It is reused when the request may

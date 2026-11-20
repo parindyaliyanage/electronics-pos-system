@@ -1,6 +1,6 @@
 import { apiClient } from "./client";
 import type {
-  CheckoutRequest, CheckoutResponse, CreateCustomerResult, Customer, InstallmentPolicy, Page, Product, SerializedUnit,
+  CheckoutRequest, CheckoutResponse, InstallmentPolicy, Page, Product, SerializedUnit,
 } from "./types";
 
 export async function searchProducts(search: string, signal?: AbortSignal) {
@@ -18,16 +18,6 @@ export async function inStockUnits(productId: string, search = "") {
   const { data } = await apiClient.get<Page<SerializedUnit>>("/inventory/serialized-units", {
     params: { productId, status: "IN_STOCK", limit: 100, ...(search ? { search } : {}) },
   });
-  return data;
-}
-
-export async function searchCustomers(search: string, signal?: AbortSignal) {
-  const { data } = await apiClient.get<Page<Customer>>("/customers", { params: { search, limit: 8 }, signal });
-  return data.data;
-}
-
-export async function createCustomer(input: { fullName: string; phone: string; email?: string; address?: string }) {
-  const { data } = await apiClient.post<CreateCustomerResult>("/customers", input);
   return data;
 }
 

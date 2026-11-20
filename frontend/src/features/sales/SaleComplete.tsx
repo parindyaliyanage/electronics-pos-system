@@ -3,6 +3,7 @@ import { errorMessage } from "../../api/client";
 import { fetchSaleInvoice } from "../../api/pos";
 import type { CheckoutResponse } from "../../api/types";
 import { Icon } from "../../components/Icon";
+import { showPdf } from "../../lib/documents";
 import { formatCents, toCents } from "../../lib/money";
 import { FREQUENCY_LABEL } from "./installment-preview";
 import { METHOD_LABEL } from "./payment";
@@ -22,26 +23,12 @@ export function SaleComplete({ sale, change, onNewSale }: Props) {
 
   useEffect(() => newSaleRef.current?.focus(), []);
 
-  // The PDF needs the login token, so it is fetched through the API client.
   const invoice = async (mode: "open" | "download") => {
-    // Open the tab now, while the click still counts as a user action, or the
-    // browser's pop-up blocker stops it once the download has finished.
-    const tab = mode === "open" ? window.open("", "_blank") : null;
     setBusy(mode);
     setError(null);
     try {
-      const url = URL.createObjectURL(await fetchSaleInvoice(sale.id));
-      if (tab) {
-        tab.location.href = url;
-      } else {
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${sale.invoice.invoiceNumber}.pdf`;
-        link.click();
-      }
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      await showPdf(() => fetchSaleInvoice(sale.id), `${sale.invoice.invoiceNumber}.pdf`, mode);
     } catch (err) {
-      tab?.close();
       setError(errorMessage(err, "Could not load the invoice."));
     } finally {
       setBusy(null);

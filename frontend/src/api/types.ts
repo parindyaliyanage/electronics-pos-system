@@ -103,3 +103,60 @@ export interface CheckoutResponse {
   totals: { subtotal: string; totalDiscount: string; grandTotal: string; amountPaid: string };
   invoice: { id: string; invoiceNumber: string; downloadPath: string };
 }
+
+export type InvoiceType = "INVOICE" | "RECEIPT";
+
+export interface SaleDocument {
+  id: string;
+  saleId: string;
+  paymentId: string | null;
+  invoiceNumber: string;
+  type: InvoiceType;
+  issuedById: string;
+  createdAt: string;
+}
+
+export type PlanStatus = "ACTIVE" | "COMPLETED" | "CANCELLED";
+export type ScheduleStatus = "PENDING" | "PARTIALLY_PAID" | "PAID" | "OVERDUE";
+
+export interface HistorySale {
+  id: string;
+  createdAt: string;
+  cashierId: string;
+  cashier: { id: string; email: string; role: string };
+  saleItems: Array<{
+    id: string;
+    quantity: number;
+    unitPrice: string;
+    discount: string;
+    product: { id: string; name: string };
+    serializedUnit: { id: string; serialNumber: string; status: string } | null;
+  }>;
+  payments: Array<{ id: string; amount: string; method: PaymentMethod; type: "FULL" | "DEPOSIT" | "INSTALLMENT"; createdAt: string }>;
+  installmentPlan: null | {
+    id: string;
+    status: PlanStatus;
+    deposit: string;
+    interestRate: string;
+    termCount: number;
+    paymentFrequency: PaymentFrequency;
+    createdAt: string;
+    completedAt: string | null;
+    cancelledAt: string | null;
+    schedules: Array<{
+      id: string;
+      dueDate: string;
+      amount: string;
+      status: ScheduleStatus;
+      allocations: Array<{ paymentId: string; amountApplied: string }>;
+    }>;
+  };
+  invoices: SaleDocument[];
+  totals: { grandTotal: string; interest: string; totalPayable: string; amountPaid: string; outstanding: string };
+}
+
+export interface CustomerHistory {
+  customer: Customer;
+  sales: HistorySale[];
+  meta: { page: number; limit: number; total: number };
+}

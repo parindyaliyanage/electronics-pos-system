@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { errorMessage } from "../../api/client";
-import { searchCustomers } from "../../api/pos";
+import { searchCustomers } from "../../api/customers";
 import type { CreateCustomerResult, Customer } from "../../api/types";
 import { Icon } from "../../components/Icon";
 import { useDebounced } from "../../hooks/useDebounced";
-import { NewCustomerDialog } from "./NewCustomerDialog";
+import { NewCustomerDialog } from "../customers/NewCustomerDialog";
 
 interface Props {
   customer: Customer | null;
