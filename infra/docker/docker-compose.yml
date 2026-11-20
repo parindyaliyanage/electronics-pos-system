@@ -41,6 +41,23 @@ services:
     depends_on:
       - postgres
 
+  # FR6 — Temporal Web UI: inspect installment workflows, timers and retries.
+  temporal-ui:
+    image: temporalio/ui:latest
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    ports:
+      - "8080:8080"
+    depends_on:
+      - temporal
+
+  # FR6 — local SMTP server that catches reminder emails (UI on :8025).
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
   backend:
     build:
       context: ../..
@@ -57,6 +74,7 @@ services:
     depends_on:
       - postgres
       - redis
+      - temporal
 
   frontend:
     build:
@@ -76,9 +94,12 @@ services:
     environment:
       DATABASE_URL: postgresql://smartretail:smartretail@postgres:5432/smartretail?schema=public
       TEMPORAL_ADDRESS: temporal:7233
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
     depends_on:
       - temporal
       - postgres
+      - mailpit
 
 volumes:
   postgres-data:

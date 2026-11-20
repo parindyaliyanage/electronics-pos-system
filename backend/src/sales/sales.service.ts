@@ -16,6 +16,7 @@ import type { AuthenticatedUser } from "../auth/auth.types";
 import { calculateInstallmentSchedule } from "../installments/installment-calculator";
 import { INSTALLMENT_POLICY_ID } from "../installments/installment.constants";
 import { PrismaService } from "../prisma/prisma.service";
+import { InstallmentWorkflowsService } from "../workflows/installment-workflows.service";
 import type { CheckoutDto } from "./dto/checkout.dto";
 import type { CheckoutInstallmentDto } from "./dto/checkout-installment.dto";
 import type { CheckoutItemDto } from "./dto/checkout-item.dto";
@@ -35,7 +36,10 @@ const saleInclude = {
 
 @Injectable()
 export class SalesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly workflows: InstallmentWorkflowsService,
+  ) {}
 
   async checkout(input: CheckoutDto, cashierId: string, idempotencyKey: string) {
     const existing = await this.prisma.sale.findUnique({ where: { idempotencyKey } });
@@ -44,7 +48,7 @@ export class SalesService {
     }
 
     try {
-      return await this.withSerializableRetry(() => this.prisma.$transaction(async (tx) => {
+      const result = await this.withSerializableRetry(() => this.prisma.$transaction(async (tx) => {
         const duplicate = await tx.sale.findUnique({ where: { idempotencyKey } });
         if (duplicate) {
           throw new ConflictException("This checkout request has already been processed");
@@ -179,6 +183,12 @@ export class SalesService {
           totals: { subtotal, totalDiscount, grandTotal, amountPaid: payment.amount },
         };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+      // FR6: start one reminder workflow per installment, only after the sale
+      // has committed. Not awaited, so checkout never depends on Temporal.
+      if (result.installmentPlan) {
+        this.workflows.startForPlanInBackground(result.installmentPlan.id);
+      }
+      return result;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         throw new ConflictException("This checkout request has already been processed");

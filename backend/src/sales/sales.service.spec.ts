@@ -1,6 +1,7 @@
 import { ConflictException } from "@nestjs/common";
 import { PaymentFrequency, PaymentMethod, PaymentType, Prisma, SerializedUnitStatus } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import type { InstallmentWorkflowsService } from "../workflows/installment-workflows.service";
 import type { CheckoutDto } from "./dto/checkout.dto";
 import { SalesService } from "./sales.service";
 
@@ -28,7 +29,8 @@ describe("SalesService", () => {
     sale: { findUnique: saleFindUnique },
     $transaction: transaction,
   } as unknown as PrismaService;
-  const service = new SalesService(prisma);
+  const workflows = { startForPlanInBackground: jest.fn() } as unknown as InstallmentWorkflowsService;
+  const service = new SalesService(prisma, workflows);
 
   const checkout: CheckoutDto = {
     customerId,

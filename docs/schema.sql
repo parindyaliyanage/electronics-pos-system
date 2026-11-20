@@ -374,6 +374,9 @@ CREATE TABLE payments (
     method          payment_method NOT NULL,
     type            payment_type NOT NULL,
 
+    -- Set for installment payments (FR5) so a resubmission is rejected.
+    idempotency_key UUID UNIQUE,
+
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

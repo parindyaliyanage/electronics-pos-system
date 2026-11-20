@@ -6,7 +6,9 @@ import {
   Prisma,
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { InstallmentWorkflowsService } from "../workflows/installment-workflows.service";
 import type { InstallmentQueryDto } from "./dto/installment-query.dto";
+import type { OverdueQueryDto } from "./dto/overdue-query.dto";
 import type { RecordInstallmentPaymentDto } from "./dto/record-installment-payment.dto";
 import type { UpdateInstallmentPolicyDto } from "./dto/update-installment-policy.dto";
 import { INSTALLMENT_POLICY_ID } from "./installment.constants";
@@ -28,7 +30,10 @@ const planInclude = {
 
 @Injectable()
 export class InstallmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly workflows: InstallmentWorkflowsService,
+  ) {}
 
   async getPolicy() {
     const policy = await this.prisma.installmentPolicy.findUnique({
@@ -45,11 +50,15 @@ export class InstallmentsService {
         where: { id: INSTALLMENT_POLICY_ID },
         update: {
           interestRate: new Prisma.Decimal(input.interestRate),
+          ...(input.reminderDaysBefore !== undefined ? { reminderDaysBefore: input.reminderDaysBefore } : {}),
+          ...(input.gracePeriodDays !== undefined ? { gracePeriodDays: input.gracePeriodDays } : {}),
           updatedById: actorId,
         },
         create: {
           id: INSTALLMENT_POLICY_ID,
           interestRate: new Prisma.Decimal(input.interestRate),
+          reminderDaysBefore: input.reminderDaysBefore,
+          gracePeriodDays: input.gracePeriodDays,
           updatedById: actorId,
         },
       });
@@ -96,7 +105,35 @@ export class InstallmentsService {
     return this.withSummary(plan);
   }
 
-  async recordPayment(planId: string, input: RecordInstallmentPaymentDto, actorId: string) {
+  async recordPayment(
+    planId: string,
+    input: RecordInstallmentPaymentDto,
+    actorId: string,
+    idempotencyKey: string,
+  ) {
+    const existing = await this.prisma.payment.findUnique({ where: { idempotencyKey } });
+    if (existing) {
+      throw new ConflictException("This payment request has already been processed");
+    }
+
+    try {
+      return await this.recordPaymentOnce(planId, input, actorId, idempotencyKey);
+    } catch (error) {
+      // Two identical requests raced past the check above; the unique index
+      // lets only one commit.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException("This payment request has already been processed");
+      }
+      throw error;
+    }
+  }
+
+  private recordPaymentOnce(
+    planId: string,
+    input: RecordInstallmentPaymentDto,
+    actorId: string,
+    idempotencyKey: string,
+  ) {
     return this.withSerializableRetry(() => this.prisma.$transaction(async (tx) => {
       const plan = await tx.installmentPlan.findUnique({
         where: { id: planId },
@@ -139,6 +176,7 @@ export class InstallmentsService {
           amount: paymentAmount,
           method: input.method,
           type: PaymentType.INSTALLMENT,
+          idempotencyKey,
         },
       });
       let unapplied = paymentAmount;
@@ -155,9 +193,13 @@ export class InstallmentsService {
         await tx.installmentSchedule.update({
           where: { id: schedule.id },
           data: {
+            // A partial payment on an OVERDUE installment keeps it on the
+            // overdue list (FR6) until it is fully settled.
             status: nowPaid.greaterThanOrEqualTo(schedule.amount)
               ? InstallmentScheduleStatus.PAID
-              : InstallmentScheduleStatus.PARTIALLY_PAID,
+              : schedule.status === InstallmentScheduleStatus.OVERDUE
+                ? InstallmentScheduleStatus.OVERDUE
+                : InstallmentScheduleStatus.PARTIALLY_PAID,
           },
         });
         paidBySchedule.set(schedule.id, nowPaid);
@@ -185,14 +227,15 @@ export class InstallmentsService {
         },
       });
       return payment;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })).then(async (payment) => ({
-      payment,
-      plan: await this.findOne(planId),
-    }));
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })).then(async (payment) => {
+      // FR6: wake this plan's workflows so they see the payment immediately.
+      this.workflows.signalPlanInBackground(planId);
+      return { payment, plan: await this.findOne(planId) };
+    });
   }
 
   async cancel(id: string, actorId: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const cancelled = await this.prisma.$transaction(async (tx) => {
       const changed = await tx.installmentPlan.updateMany({
         where: { id, status: InstallmentPlanStatus.ACTIVE },
         data: { status: InstallmentPlanStatus.CANCELLED, cancelledAt: new Date() },
@@ -211,6 +254,74 @@ export class InstallmentsService {
         },
       });
       return tx.installmentPlan.findUniqueOrThrow({ where: { id }, include: planInclude });
+    });
+    this.workflows.signalPlanInBackground(id); // FR6: stop reminders for a cancelled plan
+    return cancelled;
+  }
+
+  /** FR6 — overdue installments on active plans, oldest due date first (Administrator dashboard). */
+  async findOverdue(query: OverdueQueryDto) {
+    const where: Prisma.InstallmentScheduleWhereInput = {
+      status: InstallmentScheduleStatus.OVERDUE,
+      plan: {
+        status: InstallmentPlanStatus.ACTIVE,
+        ...(query.customerId ? { sale: { customerId: query.customerId } } : {}),
+      },
+    };
+    const skip = (query.page - 1) * query.limit;
+    const [schedules, total] = await this.prisma.$transaction([
+      this.prisma.installmentSchedule.findMany({
+        where,
+        include: {
+          allocations: { select: { amountApplied: true } },
+          notifications: true,
+          plan: {
+            select: {
+              id: true,
+              saleId: true,
+              sale: { select: { customer: { select: { id: true, fullName: true, phone: true, email: true } } } },
+            },
+          },
+        },
+        orderBy: { dueDate: "asc" },
+        skip,
+        take: query.limit,
+      }),
+      this.prisma.installmentSchedule.count({ where }),
+    ]);
+    const today = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+    return {
+      data: schedules.map((schedule) => {
+        const amountPaid = schedule.allocations.reduce(
+          (sum, allocation) => sum.plus(allocation.amountApplied),
+          new Prisma.Decimal(0),
+        );
+        return {
+          scheduleId: schedule.id,
+          planId: schedule.plan.id,
+          saleId: schedule.plan.saleId,
+          customer: schedule.plan.sale.customer,
+          dueDate: schedule.dueDate,
+          overdueAt: schedule.overdueAt,
+          daysOverdue: Math.max(0, Math.floor((today - schedule.dueDate.getTime()) / 86_400_000)),
+          amount: schedule.amount,
+          amountPaid,
+          outstanding: Prisma.Decimal.max(schedule.amount.minus(amountPaid), 0),
+          reminder: schedule.notifications[0] ?? null,
+        };
+      }),
+      meta: { page: query.page, limit: query.limit, total },
+    };
+  }
+
+  /** FR6 — reminder notifications sent (or attempted) for one plan. */
+  async findReminders(planId: string) {
+    const plan = await this.prisma.installmentPlan.findUnique({ where: { id: planId }, select: { id: true } });
+    if (!plan) throw new NotFoundException("Installment plan not found");
+    return this.prisma.installmentNotification.findMany({
+      where: { schedule: { planId } },
+      include: { schedule: { select: { id: true, dueDate: true, amount: true, status: true } } },
+      orderBy: { schedule: { dueDate: "asc" } },
     });
   }
 

@@ -97,14 +97,48 @@ describe("CustomersService", () => {
         discount: new Prisma.Decimal(10),
       }],
       payments: [{ amount: new Prisma.Decimal(100) }],
-      installmentPlan: { schedules: [] },
+      installmentPlan: null,
     }]);
     saleCount.mockResolvedValue(1);
 
     const result = await service.history("customer-1", { page: 1, limit: 20 });
 
     expect(result.sales[0].totals.grandTotal.equals(180)).toBe(true);
+    expect(result.sales[0].totals.totalPayable.equals(180)).toBe(true);
+    expect(result.sales[0].totals.interest.equals(0)).toBe(true);
     expect(result.sales[0].totals.amountPaid.equals(100)).toBe(true);
     expect(result.sales[0].totals.outstanding.equals(80)).toBe(true);
+  });
+
+  it("includes installment interest in the outstanding balance", async () => {
+    customerFindUnique.mockResolvedValue({ id: "customer-1" });
+    // Grand total 120,000; deposit 20,000; 100,000 financed at 10% = 110,000
+    // repaid in installments, so the customer owes 130,000 in total.
+    saleFindMany.mockResolvedValue([{
+      id: "sale-1",
+      saleItems: [{
+        quantity: 1,
+        unitPrice: new Prisma.Decimal(120000),
+        discount: new Prisma.Decimal(0),
+      }],
+      payments: [
+        { amount: new Prisma.Decimal(20000) },
+        { amount: new Prisma.Decimal(100000) },
+      ],
+      installmentPlan: {
+        deposit: new Prisma.Decimal(20000),
+        schedules: [
+          { amount: new Prisma.Decimal(55000) },
+          { amount: new Prisma.Decimal(55000) },
+        ],
+      },
+    }]);
+    saleCount.mockResolvedValue(1);
+
+    const result = await service.history("customer-1", { page: 1, limit: 20 });
+
+    expect(result.sales[0].totals.totalPayable.equals(130000)).toBe(true);
+    expect(result.sales[0].totals.interest.equals(10000)).toBe(true);
+    expect(result.sales[0].totals.outstanding.equals(10000)).toBe(true);
   });
 });

@@ -132,12 +132,24 @@ export class CustomersService {
           (totalValue, payment) => totalValue.plus(payment.amount),
           new Prisma.Decimal(0),
         );
+        // An installment sale is repaid as deposit + scheduled installments,
+        // and the schedules include interest, so the customer owes more than
+        // the grand total. Using the grand total here would show the balance
+        // as settled while the plan still has interest outstanding.
+        const totalPayable = sale.installmentPlan
+          ? sale.installmentPlan.schedules.reduce(
+            (totalValue, schedule) => totalValue.plus(schedule.amount),
+            sale.installmentPlan.deposit,
+          )
+          : grandTotal;
         return {
           ...sale,
           totals: {
             grandTotal,
+            interest: totalPayable.minus(grandTotal),
+            totalPayable,
             amountPaid,
-            outstanding: Prisma.Decimal.max(grandTotal.minus(amountPaid), 0),
+            outstanding: Prisma.Decimal.max(totalPayable.minus(amountPaid), 0),
           },
         };
       }),

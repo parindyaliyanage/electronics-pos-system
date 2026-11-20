@@ -184,6 +184,26 @@ Plan responses derive `outstandingBalance`, `nextDueDate`, and `nextAmountDue`
 from the allocation ledger. Cancellation retains the plan, schedules,
 payments, and an audit entry instead of deleting history.
 
+### Installment Reminder Workflow (FR6)
+
+```text
+GET  /installments/overdue                      Administrator
+GET  /installments/:id/reminders                Administrator, Worker
+GET  /workflows/health                          Administrator
+GET  /workflows/installments/:scheduleId        Administrator
+POST /workflows/installments/:scheduleId/recheck Administrator
+POST /workflows/installments/sync               Administrator
+```
+
+A deposit checkout starts one Temporal workflow per installment (run by
+`workers/temporal-worker`). Each one emails a reminder `reminderDaysBefore` days
+before the due date, checks on the due date, and after `gracePeriodDays` marks
+the installment `OVERDUE`. Recording a payment or cancelling the plan signals
+the workflows so they stop at once. Reminder emails go to Mailpit in
+development (http://localhost:8025), and Temporal UI is at
+http://localhost:8080. Set `WORKFLOW_DAY_DURATION_MS=10000` to compress a "day"
+to 10 s for testing. Full reference: [`docs/API_Endpoints_FR6.md`](docs/API_Endpoints_FR6.md).
+
 ### Customer API (FR4)
 
 ```text
