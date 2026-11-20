@@ -165,11 +165,17 @@ enum AnomalySubjectType {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  role         UserRole
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id                String    @id @default(uuid()) @db.Uuid
+  email             String    @unique
+  fullName          String?   @map("full_name") // shown on invoices/receipts (FR7)
+  passwordHash      String    @map("password_hash")
+  role              UserRole
+  // Deactivated users cannot log in and their tokens stop working. Users are
+  // never deleted because sales, stock movements and audit logs reference them.
+  active            Boolean   @default(true)
+  // Tokens issued before this moment are rejected (password reset/change).
+  passwordChangedAt DateTime? @map("password_changed_at") @db.Timestamptz
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   stockMovements             StockMovement[]
   sales                      Sale[]
@@ -178,6 +184,7 @@ model User {
   loginAttempts              LoginAttempt[]
   installmentPoliciesUpdated InstallmentPolicy[]
 
+  @@index([role, active], name: "idx_users_role_active")
   @@map("users")
 }
 

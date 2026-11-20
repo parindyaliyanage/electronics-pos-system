@@ -114,8 +114,21 @@ administrator-configured installment rate.
 POST /auth/login   Public; returns a signed Bearer JWT
 GET  /auth/me      Requires a valid, unexpired JWT
 POST /auth/logout  Requires JWT; the client then deletes its token
-GET  /users        Administrator only
+POST /auth/change-password       Any signed-in user changes their own password
+
+GET   /users                     Administrator only (filters: role, active, search)
+GET   /users/:id                 Administrator only
+POST  /users                     Administrator only — add an Administrator or Worker
+PATCH /users/:id                 Administrator only — fullName and/or role
+PATCH /users/:id/deactivate      Administrator only
+PATCH /users/:id/activate        Administrator only
+PATCH /users/:id/password        Administrator only — reset a password
 ```
+
+The seed creates only the first Administrator and Worker. Add everyone else
+through `POST /users`. Accounts are deactivated, never deleted. A deactivated
+user, or a token issued before a password reset, is rejected straight away. The
+last active Administrator cannot be deactivated or demoted.
 
 Send protected requests with `Authorization: Bearer <accessToken>`. JWT expiry
 is controlled by `JWT_EXPIRES_IN` and defaults to 8 hours.
