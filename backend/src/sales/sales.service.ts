@@ -15,6 +15,7 @@ import {
 import type { AuthenticatedUser } from "../auth/auth.types";
 import { calculateInstallmentSchedule } from "../installments/installment-calculator";
 import { INSTALLMENT_POLICY_ID } from "../installments/installment.constants";
+import { InvoicesService } from "../invoices/invoices.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { InstallmentWorkflowsService } from "../workflows/installment-workflows.service";
 import type { CheckoutDto } from "./dto/checkout.dto";
@@ -39,6 +40,7 @@ export class SalesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly workflows: InstallmentWorkflowsService,
+    private readonly invoices: InvoicesService,
   ) {}
 
   async checkout(input: CheckoutDto, cashierId: string, idempotencyKey: string) {
@@ -165,6 +167,9 @@ export class SalesService {
             });
           }
         }
+        // FR7: the invoice number is assigned in the same transaction, so a
+        // committed sale always has one and a rolled-back sale uses none.
+        const invoice = await this.invoices.createSaleInvoice(tx, sale.id, cashierId);
         await tx.auditLog.create({
           data: {
             actorId: cashierId,
@@ -181,6 +186,11 @@ export class SalesService {
         return {
           ...createdSale,
           totals: { subtotal, totalDiscount, grandTotal, amountPaid: payment.amount },
+          invoice: {
+            id: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            downloadPath: `/sales/${sale.id}/invoice`,
+          },
         };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
       // FR6: start one reminder workflow per installment, only after the sale
@@ -188,6 +198,8 @@ export class SalesService {
       if (result.installmentPlan) {
         this.workflows.startForPlanInBackground(result.installmentPlan.id);
       }
+      // FR7: render and store the PDF after commit; checkout never waits on it.
+      this.invoices.generateInBackground(result.invoice.id);
       return result;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {

@@ -5,6 +5,7 @@ import {
   PaymentType,
   Prisma,
 } from "@prisma/client";
+import { InvoicesService } from "../invoices/invoices.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { InstallmentWorkflowsService } from "../workflows/installment-workflows.service";
 import type { InstallmentQueryDto } from "./dto/installment-query.dto";
@@ -33,6 +34,7 @@ export class InstallmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly workflows: InstallmentWorkflowsService,
+    private readonly invoices: InvoicesService,
   ) {}
 
   async getPolicy() {
@@ -226,11 +228,23 @@ export class InstallmentsService {
           entityId: plan.id,
         },
       });
-      return payment;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })).then(async (payment) => {
+      // FR7: a separate receipt for every installment payment, numbered in
+      // the same transaction as the payment itself.
+      const receipt = await this.invoices.createPaymentReceipt(tx, plan.saleId, payment.id, actorId);
+      return { payment, receipt };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })).then(async ({ payment, receipt }) => {
       // FR6: wake this plan's workflows so they see the payment immediately.
       this.workflows.signalPlanInBackground(planId);
-      return { payment, plan: await this.findOne(planId) };
+      this.invoices.generateInBackground(receipt.id);
+      return {
+        payment,
+        receipt: {
+          id: receipt.id,
+          invoiceNumber: receipt.invoiceNumber,
+          downloadPath: `/payments/${payment.id}/receipt`,
+        },
+        plan: await this.findOne(planId),
+      };
     });
   }
 

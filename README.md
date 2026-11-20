@@ -217,6 +217,24 @@ development (http://localhost:8025), and Temporal UI is at
 http://localhost:8080. Set `WORKFLOW_DAY_DURATION_MS=10000` to compress a "day"
 to 10 s for testing. Full reference: [`docs/API_Endpoints_FR6.md`](docs/API_Endpoints_FR6.md).
 
+### Invoices and Receipts (FR7)
+
+```text
+GET /sales/:id/invoice        Administrator; Worker who made the sale
+GET /payments/:id/receipt     Administrator; Worker who recorded the payment
+GET /invoices                 Administrator (all); Worker (own documents)
+GET /invoices/:id             Administrator; issuing Worker
+GET /invoices/:id/download    Administrator; issuing Worker
+```
+
+Every checkout creates a sequential invoice (`INV-000001`), and every installment
+payment creates its own receipt (`RCP-000001`). The number is assigned in the same
+transaction as the sale or payment. The PDF is rendered once after commit, stored
+in MinIO (console http://localhost:9001, bucket `smartretail`), and served from
+storage on every later download. Products accept an optional `warrantyMonths`,
+which is printed with the serial/IMEI. Full reference:
+[`docs/API_Endpoints_FR7.md`](docs/API_Endpoints_FR7.md).
+
 ### Customer API (FR4)
 
 ```text

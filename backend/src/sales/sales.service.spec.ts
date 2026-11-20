@@ -2,6 +2,7 @@ import { ConflictException } from "@nestjs/common";
 import { PaymentFrequency, PaymentMethod, PaymentType, Prisma, SerializedUnitStatus } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import type { InstallmentWorkflowsService } from "../workflows/installment-workflows.service";
+import type { InvoicesService } from "../invoices/invoices.service";
 import type { CheckoutDto } from "./dto/checkout.dto";
 import { SalesService } from "./sales.service";
 
@@ -30,7 +31,11 @@ describe("SalesService", () => {
     $transaction: transaction,
   } as unknown as PrismaService;
   const workflows = { startForPlanInBackground: jest.fn() } as unknown as InstallmentWorkflowsService;
-  const service = new SalesService(prisma, workflows);
+  const invoices = {
+    createSaleInvoice: jest.fn().mockResolvedValue({ id: "invoice-1", invoiceNumber: "INV-000001" }),
+    generateInBackground: jest.fn(),
+  } as unknown as InvoicesService;
+  const service = new SalesService(prisma, workflows, invoices);
 
   const checkout: CheckoutDto = {
     customerId,

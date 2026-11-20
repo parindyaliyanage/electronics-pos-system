@@ -206,6 +206,10 @@ CREATE TABLE products (
     low_stock_threshold   INTEGER NOT NULL DEFAULT 5
                           CHECK (low_stock_threshold >= 0),
 
+    -- FR7: printed on invoices; NULL means no warranty.
+    warranty_months       INTEGER
+                          CHECK (warranty_months IS NULL OR warranty_months BETWEEN 0 AND 120),
+
     active                BOOLEAN NOT NULL DEFAULT TRUE,
 
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -524,17 +528,41 @@ CREATE TABLE invoices (
                         REFERENCES sales(id)
                         ON DELETE RESTRICT,
 
+    -- RECEIPT only: the installment payment it acknowledges.
+    payment_id          UUID UNIQUE
+                        REFERENCES payments(id)
+                        ON DELETE RESTRICT,
+
     invoice_number      TEXT NOT NULL UNIQUE,
 
+    -- Object-storage key of the generated PDF (e.g. invoices/INV-000001.pdf).
     document_url        TEXT,
 
     type                invoice_type NOT NULL,
 
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+    -- Cashier (invoice) or worker who recorded the payment (receipt).
+    issued_by           UUID NOT NULL
+                        REFERENCES users(id)
+                        ON DELETE RESTRICT,
+
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_invoices_receipt_payment
+        CHECK ((type = 'RECEIPT') = (payment_id IS NOT NULL))
 );
 
 CREATE INDEX idx_invoices_sale
     ON invoices(sale_id);
+
+CREATE INDEX idx_invoices_issued_by
+    ON invoices(issued_by);
+
+-- FR7: gap-free sequential numbering per document type, incremented in the
+-- same transaction as the sale/payment (a SEQUENCE would leave gaps).
+CREATE TABLE document_counters (
+    type            invoice_type PRIMARY KEY,
+    last_number     INTEGER NOT NULL DEFAULT 0
+);
 
 
 -- =============================================================================
