@@ -75,6 +75,17 @@ enum InstallmentPlanStatus {
   @@map("installment_plan_status")
 }
 
+// Why an Administrator cancelled an installment plan (FR5).
+enum InstallmentCancelReason {
+  ITEM_RETURNED
+  DEBT_WRITTEN_OFF
+  CUSTOMER_REQUEST
+  CREATED_IN_ERROR
+  OTHER
+
+  @@map("installment_cancel_reason")
+}
+
 enum InstallmentScheduleStatus {
   PENDING
   PARTIALLY_PAID
@@ -387,6 +398,9 @@ model InstallmentPlan {
   createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz
   completedAt      DateTime?             @map("completed_at") @db.Timestamptz
   cancelledAt      DateTime?             @map("cancelled_at") @db.Timestamptz
+  // Set together with cancelledAt. Plans cancelled before this existed have none.
+  cancelReason     InstallmentCancelReason? @map("cancel_reason")
+  cancelNote       String?               @map("cancel_note") @db.VarChar(500)
 
   sale       Sale                   @relation(fields: [saleId], references: [id])
   schedules  InstallmentSchedule[]

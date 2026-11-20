@@ -6,6 +6,7 @@ import { homePath } from "./lib/session";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import CustomerDetailPage from "./pages/CustomerDetailPage";
 import CustomersPage from "./pages/CustomersPage";
+import InstallmentDetailPage from "./pages/InstallmentDetailPage";
 import InstallmentsPage from "./pages/InstallmentsPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
         <Route path="installments" element={<InstallmentsPage />} />
+        <Route path="installments/:id" element={<InstallmentDetailPage />} />
         <Route path="reports" element={<RequireRole roles={[...ADMIN]}><ReportsPage /></RequireRole>} />
         <Route path="users" element={<RequireRole roles={[...ADMIN]}><UsersPage /></RequireRole>} />
         <Route path="*" element={<NotFoundPage />} />

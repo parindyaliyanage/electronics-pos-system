@@ -9,6 +9,7 @@ import { InvoicesService } from "../invoices/invoices.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { InstallmentWorkflowsService } from "../workflows/installment-workflows.service";
 import type { InstallmentQueryDto } from "./dto/installment-query.dto";
+import type { CancelInstallmentPlanDto } from "./dto/cancel-installment-plan.dto";
 import type { OverdueQueryDto } from "./dto/overdue-query.dto";
 import type { RecordInstallmentPaymentDto } from "./dto/record-installment-payment.dto";
 import type { UpdateInstallmentPolicyDto } from "./dto/update-installment-policy.dto";
@@ -248,11 +249,16 @@ export class InstallmentsService {
     });
   }
 
-  async cancel(id: string, actorId: string) {
+  async cancel(id: string, input: CancelInstallmentPlanDto, actorId: string) {
     const cancelled = await this.prisma.$transaction(async (tx) => {
       const changed = await tx.installmentPlan.updateMany({
         where: { id, status: InstallmentPlanStatus.ACTIVE },
-        data: { status: InstallmentPlanStatus.CANCELLED, cancelledAt: new Date() },
+        data: {
+          status: InstallmentPlanStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancelReason: input.reason,
+          cancelNote: input.note || null,
+        },
       });
       if (changed.count !== 1) {
         const exists = await tx.installmentPlan.findUnique({ where: { id } });
@@ -270,7 +276,8 @@ export class InstallmentsService {
       return tx.installmentPlan.findUniqueOrThrow({ where: { id }, include: planInclude });
     });
     this.workflows.signalPlanInBackground(id); // FR6: stop reminders for a cancelled plan
-    return cancelled;
+    // Same shape as GET /installments/:id (per-installment paid/outstanding + summary).
+    return this.withSummary(cancelled);
   }
 
   /** FR6 — overdue installments on active plans, oldest due date first (Administrator dashboard). */

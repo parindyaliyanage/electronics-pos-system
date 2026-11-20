@@ -16,6 +16,7 @@ import { isUUID } from "class-validator";
 import type { AuthenticatedUser } from "../auth/auth.types";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
+import { CancelInstallmentPlanDto } from "./dto/cancel-installment-plan.dto";
 import { InstallmentQueryDto } from "./dto/installment-query.dto";
 import { OverdueQueryDto } from "./dto/overdue-query.dto";
 import { RecordInstallmentPaymentDto } from "./dto/record-installment-payment.dto";
@@ -84,8 +85,9 @@ export class InstallmentsController {
   @Roles(UserRole.ADMINISTRATOR)
   cancel(
     @Param("id", ParseUUIDPipe) id: string,
+    @Body() input: CancelInstallmentPlanDto,
     @CurrentUser() administrator: AuthenticatedUser,
   ) {
-    return this.installments.cancel(id, administrator.id);
+    return this.installments.cancel(id, input, administrator.id);
   }
 }

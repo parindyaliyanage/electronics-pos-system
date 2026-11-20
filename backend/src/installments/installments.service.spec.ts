@@ -1,5 +1,6 @@
 import { ConflictException } from "@nestjs/common";
 import {
+  InstallmentCancelReason,
   InstallmentPlanStatus,
   InstallmentScheduleStatus,
   PaymentMethod,
@@ -9,6 +10,9 @@ import {
 import type { PrismaService } from "../prisma/prisma.service";
 import type { InstallmentWorkflowsService } from "../workflows/installment-workflows.service";
 import type { InvoicesService } from "../invoices/invoices.service";
+import { plainToInstance } from "class-transformer";
+import { validate } from "class-validator";
+import { CancelInstallmentPlanDto } from "./dto/cancel-installment-plan.dto";
 import { InstallmentsService } from "./installments.service";
 
 describe("InstallmentsService.recordPayment", () => {
@@ -105,5 +109,76 @@ describe("InstallmentsService.recordPayment", () => {
     await expect(service.recordPayment(planId, input, actorId, idempotencyKey))
       .rejects.toThrow("This payment request has already been processed");
     expect(workflows.signalPlanInBackground).not.toHaveBeenCalled();
+  });
+});
+
+describe("InstallmentsService.cancel", () => {
+  const tx = {
+    installmentPlan: { updateMany: jest.fn(), findUnique: jest.fn(), findUniqueOrThrow: jest.fn() },
+    auditLog: { create: jest.fn() },
+  };
+  const prisma = {
+    $transaction: jest.fn((operation: (client: typeof tx) => unknown) => operation(tx)),
+  } as unknown as PrismaService;
+  const workflows = { signalPlanInBackground: jest.fn() } as unknown as InstallmentWorkflowsService;
+  const service = new InstallmentsService(prisma, workflows, {} as InvoicesService);
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    tx.installmentPlan.updateMany.mockResolvedValue({ count: 1 });
+    tx.installmentPlan.findUniqueOrThrow.mockResolvedValue({
+      id: "plan-1",
+      status: InstallmentPlanStatus.CANCELLED,
+      schedules: [{
+        id: "s1", dueDate: new Date("2026-12-20"), amount: new Prisma.Decimal(100), status: InstallmentScheduleStatus.PARTIALLY_PAID,
+        allocations: [{ amountApplied: new Prisma.Decimal(40) }],
+      }],
+    });
+  });
+
+  it("stores the reason and note, audits, stops reminders, and returns the summary", async () => {
+    const plan = await service.cancel("plan-1", { reason: InstallmentCancelReason.DEBT_WRITTEN_OFF, note: "Customer moved abroad" }, "admin");
+    expect(tx.installmentPlan.updateMany).toHaveBeenCalledWith({
+      where: { id: "plan-1", status: InstallmentPlanStatus.ACTIVE },
+      data: expect.objectContaining({
+        status: InstallmentPlanStatus.CANCELLED,
+        cancelReason: InstallmentCancelReason.DEBT_WRITTEN_OFF,
+        cancelNote: "Customer moved abroad",
+      }),
+    });
+    expect(tx.auditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ action: "CANCEL", entityId: "plan-1" }) });
+    expect(workflows.signalPlanInBackground).toHaveBeenCalledWith("plan-1");
+    expect(plan.summary.outstandingBalance.toString()).toBe("60");
+  });
+
+  it("refuses a plan that is not active", async () => {
+    tx.installmentPlan.updateMany.mockResolvedValue({ count: 0 });
+    tx.installmentPlan.findUnique.mockResolvedValue({ id: "plan-1", status: InstallmentPlanStatus.COMPLETED });
+    await expect(service.cancel("plan-1", { reason: InstallmentCancelReason.OTHER, note: "x" }, "admin"))
+      .rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+describe("CancelInstallmentPlanDto", () => {
+  const check = (body: object) => validate(plainToInstance(CancelInstallmentPlanDto, body)).then((errors) => errors.map((e) => e.property));
+
+  it("requires a valid reason", async () => {
+    expect(await check({})).toContain("reason");
+    expect(await check({ reason: "BORED" })).toContain("reason");
+    expect(await check({ reason: "ITEM_RETURNED" })).toEqual([]);
+  });
+
+  it("requires a note only for OTHER, and limits its length", async () => {
+    expect(await check({ reason: "OTHER" })).toContain("note");
+    expect(await check({ reason: "OTHER", note: "   " })).toContain("note");
+    expect(await check({ reason: "OTHER", note: "Shop closed the account" })).toEqual([]);
+    expect(await check({ reason: "ITEM_RETURNED", note: "x".repeat(501) })).toContain("note");
+    expect(await check({ reason: "ITEM_RETURNED", note: "   " })).toEqual([]); // blank note is fine
+    expect(await check({ reason: "OTHER", note: 5 })).toContain("note");
+  });
+
+  it("gives one clear message when OTHER has no note", async () => {
+    const [error] = await validate(plainToInstance(CancelInstallmentPlanDto, { reason: "OTHER" }));
+    expect(Object.values(error.constraints ?? {})).toEqual(["note is required when the reason is OTHER"]);
   });
 });

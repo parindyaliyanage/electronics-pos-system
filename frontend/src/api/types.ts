@@ -117,6 +117,7 @@ export interface SaleDocument {
 }
 
 export type PlanStatus = "ACTIVE" | "COMPLETED" | "CANCELLED";
+export type CancelReason = "ITEM_RETURNED" | "DEBT_WRITTEN_OFF" | "CUSTOMER_REQUEST" | "CREATED_IN_ERROR" | "OTHER";
 export type ScheduleStatus = "PENDING" | "PARTIALLY_PAID" | "PAID" | "OVERDUE";
 
 export interface HistorySale {
@@ -143,6 +144,8 @@ export interface HistorySale {
     createdAt: string;
     completedAt: string | null;
     cancelledAt: string | null;
+    cancelReason: CancelReason | null;
+    cancelNote: string | null;
     schedules: Array<{
       id: string;
       dueDate: string;
@@ -159,4 +162,85 @@ export interface CustomerHistory {
   customer: Customer;
   sales: HistorySale[];
   meta: { page: number; limit: number; total: number };
+}
+
+export interface PlanSchedule {
+  id: string;
+  dueDate: string;
+  amount: string;
+  status: ScheduleStatus;
+  overdueAt: string | null;
+  amountPaid: string;
+  outstanding: string;
+  allocations: Array<{ id: string; paymentId: string; amountApplied: string }>;
+}
+
+export interface Plan {
+  id: string;
+  saleId: string;
+  deposit: string;
+  interestRate: string;
+  termCount: number;
+  paymentFrequency: PaymentFrequency;
+  status: PlanStatus;
+  createdAt: string;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: CancelReason | null;
+  cancelNote: string | null;
+  sale: {
+    id: string;
+    createdAt: string;
+    cashierId: string;
+    customer: Customer;
+    cashier: { id: string; email: string; role: string };
+    saleItems: Array<{ id: string; quantity: number; unitPrice: string; discount: string; product: { id: string; name: string } }>;
+    payments: Array<{ id: string; amount: string; method: PaymentMethod; type: "FULL" | "DEPOSIT" | "INSTALLMENT"; createdAt: string }>;
+  };
+  schedules: PlanSchedule[];
+  summary: { outstandingBalance: string; nextDueDate: string | null; nextAmountDue: string };
+}
+
+export interface ReceiptListItem {
+  id: string;
+  invoiceNumber: string;
+  type: InvoiceType;
+  saleId: string;
+  paymentId: string | null;
+  issuedById: string;
+  createdAt: string;
+  issuedBy: { id: string; email: string; fullName: string | null };
+}
+
+export interface ReminderRecord {
+  id: string;
+  scheduleId: string;
+  type: "REMINDER";
+  channel: "EMAIL";
+  recipient: string | null;
+  status: "PENDING" | "SENT" | "FAILED" | "SKIPPED";
+  attempts: number;
+  lastError: string | null;
+  sentAt: string | null;
+  schedule: { id: string; dueDate: string; amount: string; status: ScheduleStatus };
+}
+
+export interface OverdueItem {
+  scheduleId: string;
+  planId: string;
+  saleId: string;
+  customer: Customer;
+  dueDate: string;
+  overdueAt: string | null;
+  daysOverdue: number;
+  amount: string;
+  amountPaid: string;
+  outstanding: string;
+  reminder: { status: ReminderRecord["status"]; sentAt: string | null } | null;
+}
+
+export interface RecordPaymentResponse {
+  payment: { id: string; amount: string; method: PaymentMethod; createdAt: string };
+  receipt: { id: string; invoiceNumber: string; downloadPath: string };
+  plan: Plan;
 }
