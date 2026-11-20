@@ -313,7 +313,9 @@ Register one physical unit of a **serialized** product.
 **Errors:** 409 serial number already exists, 400 product not serialized or inactive, 404 product.
 
 ### 17. GET `/inventory/serialized-units` — Both
-Query: `productId`, `search` (serial number, product name, category name), `page`, `limit`. Sorted by serial number. Each unit includes its `product` and `category`.
+Query: `productId`, `search` (serial number, product name, category name), `status` (`IN_STOCK` \| `SOLD` \| `RETURNED`; optional, an unknown value is a 400), `page`, `limit`. Sorted by serial number. Each unit includes its `product` and `category`.
+
+The POS uses `?productId=…&status=IN_STOCK` to list only the units that can still be sold.
 
 ---
 

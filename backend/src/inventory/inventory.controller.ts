@@ -6,6 +6,7 @@ import { Roles } from "../auth/decorators/roles.decorator";
 import { CreateSerializedUnitDto } from "./dto/create-serialized-unit.dto";
 import { CreateStockMovementDto } from "./dto/create-stock-movement.dto";
 import { InventoryQueryDto } from "./dto/inventory-query.dto";
+import { SerializedUnitQueryDto } from "./dto/serialized-unit-query.dto";
 import { InventoryService } from "./inventory.service";
 
 @Controller("inventory")
@@ -38,7 +39,7 @@ export class InventoryController {
 
   @Get("serialized-units")
   @Roles(UserRole.ADMINISTRATOR, UserRole.WORKER)
-  findSerializedUnits(@Query() query: InventoryQueryDto) {
+  findSerializedUnits(@Query() query: SerializedUnitQueryDto) {
     return this.inventory.findSerializedUnits(query);
   }
 }

@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { StockMovementType } from "@prisma/client";
+import { SerializedUnitStatus, StockMovementType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { InventoryService } from "./inventory.service";
 
@@ -61,5 +61,19 @@ describe("InventoryService", () => {
       data: expect.objectContaining({ type: StockMovementType.PURCHASE, quantity: 1 }),
     });
     expect(result).toEqual(expect.objectContaining({ stockMovementId: "movement-1" }));
+  });
+
+  it("filters serialized units by status so the POS only sees sellable units", async () => {
+    const findMany = jest.fn().mockReturnValue("rows");
+    const count = jest.fn().mockReturnValue("count");
+    const listing = new InventoryService({
+      serializedUnit: { findMany, count },
+      $transaction: jest.fn(async () => [[{ id: "u1" }], 1]),
+    } as unknown as PrismaService);
+
+    await listing.findSerializedUnits({ productId: "p1", status: SerializedUnitStatus.IN_STOCK, page: 1, limit: 100 });
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { productId: "p1", status: SerializedUnitStatus.IN_STOCK },
+    }));
   });
 });
