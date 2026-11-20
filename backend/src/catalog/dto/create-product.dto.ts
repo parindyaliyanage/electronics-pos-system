@@ -1,5 +1,5 @@
 import { Transform, Type } from "class-transformer";
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min, MinLength } from "class-validator";
+import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from "class-validator";
 
 export class CreateProductDto {
   @IsUUID()
@@ -30,4 +30,12 @@ export class CreateProductDto {
   @IsInt()
   @Min(0)
   lowStockThreshold?: number;
+
+  // FR7 — warranty length printed on invoices (0–120 months; omit/null for none).
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(120)
+  warrantyMonths?: number;
 }

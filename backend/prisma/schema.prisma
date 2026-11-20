@@ -183,6 +183,7 @@ model User {
   auditLogs                  AuditLog[]
   loginAttempts              LoginAttempt[]
   installmentPoliciesUpdated InstallmentPolicy[]
+  invoicesIssued             Invoice[]
 
   @@index([role, active], name: "idx_users_role_active")
   @@map("users")
@@ -237,6 +238,8 @@ model Product {
   sellingPrice      Decimal  @map("selling_price") @db.Decimal(12, 2)
   isSerialized      Boolean  @default(false) @map("is_serialized")
   lowStockThreshold Int      @default(5) @map("low_stock_threshold")
+  // FR7 — printed on invoices; null means no warranty.
+  warrantyMonths    Int?     @map("warranty_months")
   active            Boolean  @default(true)
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
@@ -348,6 +351,7 @@ model Payment {
   sale         Sale                @relation(fields: [saleId], references: [id])
   allocations  PaymentAllocation[]
   anomalyFlags AnomalyFlag[]
+  receipt      Invoice?
 
   @@index([saleId], name: "idx_payments_sale")
   @@index([createdAt], name: "idx_payments_created_at")
@@ -450,18 +454,35 @@ model PaymentAllocation {
   @@map("payment_allocations")
 }
 
+// FR7 — one INVOICE per sale, one RECEIPT per installment payment. The
+// number is assigned in the same transaction as the sale/payment; the PDF is
+// rendered once, stored in object storage (documentUrl holds the object key)
+// and served from there on every later download.
 model Invoice {
   id            String      @id @default(uuid()) @db.Uuid
   saleId        String      @map("sale_id") @db.Uuid
+  paymentId     String?     @unique @map("payment_id") @db.Uuid // RECEIPT only
   invoiceNumber String      @unique @map("invoice_number")
   documentUrl   String?     @map("document_url")
   type          InvoiceType
+  issuedById    String      @map("issued_by") @db.Uuid // cashier / worker who took the payment
   createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
 
-  sale Sale @relation(fields: [saleId], references: [id])
+  sale     Sale     @relation(fields: [saleId], references: [id])
+  payment  Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  issuedBy User     @relation(fields: [issuedById], references: [id])
 
   @@index([saleId], name: "idx_invoices_sale")
+  @@index([issuedById], name: "idx_invoices_issued_by")
   @@map("invoices")
+}
+
+// FR7 — gap-free sequential numbering per document type (INV-000001, RCP-000001).
+model DocumentCounter {
+  type       InvoiceType @id
+  lastNumber Int         @default(0) @map("last_number")
+
+  @@map("document_counters")
 }
 
 model ReportJob {

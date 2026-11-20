@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { InstallmentWorkflowsService } from "../workflows/installment-workflows.service";
+import type { InvoicesService } from "../invoices/invoices.service";
 import { InstallmentsService } from "./installments.service";
 
 describe("InstallmentsService.recordPayment", () => {
@@ -36,7 +37,11 @@ describe("InstallmentsService.recordPayment", () => {
     $transaction: transaction,
   } as unknown as PrismaService;
   const workflows = { signalPlanInBackground: jest.fn() } as unknown as InstallmentWorkflowsService;
-  const service = new InstallmentsService(prisma, workflows);
+  const invoices = {
+    createPaymentReceipt: jest.fn().mockResolvedValue({ id: "invoice-1", invoiceNumber: "RCP-000001" }),
+    generateInBackground: jest.fn(),
+  } as unknown as InvoicesService;
+  const service = new InstallmentsService(prisma, workflows, invoices);
   const input = { scheduleId: "schedule-1", amount: 150, method: PaymentMethod.CASH };
 
   beforeEach(() => {

@@ -264,6 +264,7 @@ One product with `category`, its `serializedUnits` (sorted by serial number), `c
 | `costPrice`, `sellingPrice` | Required, ≥ 0, max 2 decimals |
 | `isSerialized` | Optional, default `false`. `true` = each unit is tracked by serial number |
 | `lowStockThreshold` | Optional integer ≥ 0, default `5` |
+| `warrantyMonths` | Optional integer 0–120, printed on invoices (FR7). Omit for no warranty |
 
 **201** returns the product with `currentStock: 0`.
 **Errors:** 404 category not found, 400 category inactive, 403 worker.
