@@ -18,11 +18,13 @@ async function main() {
       email: requiredEnvironmentVariable("SEED_ADMIN_EMAIL").toLowerCase(),
       password: requiredEnvironmentVariable("SEED_ADMIN_PASSWORD"),
       role: UserRole.ADMINISTRATOR,
+      fullName: "System Administrator",
     },
     {
       email: requiredEnvironmentVariable("SEED_WORKER_EMAIL").toLowerCase(),
       password: requiredEnvironmentVariable("SEED_WORKER_PASSWORD"),
       role: UserRole.WORKER,
+      fullName: "Default Worker",
     },
   ];
 
@@ -32,7 +34,7 @@ async function main() {
     const savedUser = await prisma.user.upsert({
       where: { email: user.email },
       update: { passwordHash, role: user.role },
-      create: { email: user.email, passwordHash, role: user.role },
+      create: { email: user.email, fullName: user.fullName, passwordHash, role: user.role },
     });
     if (user.role === UserRole.ADMINISTRATOR) administratorId = savedUser.id;
   }

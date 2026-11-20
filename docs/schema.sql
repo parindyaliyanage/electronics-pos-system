@@ -123,12 +123,20 @@ CREATE TYPE anomaly_subject_type AS ENUM (
 -- =============================================================================
 
 CREATE TABLE users (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email           TEXT NOT NULL UNIQUE,
-    password_hash   TEXT NOT NULL,
-    role            user_role NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email               TEXT NOT NULL UNIQUE,
+    full_name           TEXT,
+    password_hash       TEXT NOT NULL,
+    role                user_role NOT NULL,
+    -- Users are deactivated, never deleted (sales/audit logs reference them).
+    active              BOOLEAN NOT NULL DEFAULT true,
+    -- Tokens issued before this are rejected after a password reset/change.
+    password_changed_at TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_users_role_active
+    ON users(role, active);
 
 
 -- Separate table because a failed login may use an email that

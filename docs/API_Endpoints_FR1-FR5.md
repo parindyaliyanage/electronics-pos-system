@@ -4,6 +4,8 @@ Reference for testing the backend in Postman. Everything here is taken from the
 current code in `backend/src/`. An importable Postman collection that runs these
 in order lives next to this file:
 [`postman/SmartRetail_FR1-FR5.postman_collection.json`](postman/SmartRetail_FR1-FR5.postman_collection.json).
+User management (4a–4g) has its own collection:
+[`postman/SmartRetail_FR1_User_Management.postman_collection.json`](postman/SmartRetail_FR1_User_Management.postman_collection.json).
 
 ## General rules
 
@@ -49,6 +51,13 @@ in order lives next to this file:
 | 2 | GET | `/auth/me` | Both | FR1 |
 | 3 | POST | `/auth/logout` | Both | FR1 |
 | 4 | GET | `/users` | ADMIN | FR1 |
+| 4a | GET | `/users/:id` | ADMIN | FR1 |
+| 4b | POST | `/users` | ADMIN | FR1 |
+| 4c | PATCH | `/users/:id` | ADMIN | FR1 |
+| 4d | PATCH | `/users/:id/deactivate` | ADMIN | FR1 |
+| 4e | PATCH | `/users/:id/activate` | ADMIN | FR1 |
+| 4f | PATCH | `/users/:id/password` | ADMIN | FR1 |
+| 4g | POST | `/auth/change-password` | Both | FR1 |
 | 5 | GET | `/categories` | Both | FR2 |
 | 6 | POST | `/categories` | ADMIN | FR2 |
 | 7 | PATCH | `/categories/:id` | ADMIN | FR2 |
@@ -104,24 +113,94 @@ Log in and get a JWT.
   "accessToken": "eyJhbGciOi...",
   "tokenType": "Bearer",
   "expiresIn": "8h",
-  "user": { "id": "uuid", "email": "admin@smartretail.local", "role": "ADMINISTRATOR", "createdAt": "..." }
+  "user": { "id": "uuid", "email": "admin@smartretail.local", "fullName": "System Administrator", "role": "ADMINISTRATOR", "createdAt": "..." }
 }
 ```
 
-**Errors:** 401 `Invalid email or password` (same message for unknown email and wrong password). 400 for a bad email format.
+**Errors:** 401 `Invalid email or password` (same message for an unknown email, a wrong password, and a deactivated account). 400 for a bad email format.
 
 **Side effect:** every attempt, successful or not, is saved in `login_attempts`.
 
 ### 2. GET `/auth/me` — Both
-Returns the logged-in user: `{ id, email, role, createdAt }`.
-**Errors:** 401 without a token, with a bad/expired token, or if the user was deleted.
+Returns the logged-in user: `{ id, email, fullName, role, active, createdAt }`.
+**Errors:** 401 without a token, with a bad or expired token, or when the account has been deactivated. Also 401 when the token was issued before the user's password was last changed or reset.
 
 ### 3. POST `/auth/logout` — Both
 Returns **200** `{ "message": "Logged out" }`. Nothing happens on the server (JWTs are stateless); the client just throws the token away. The token keeps working until it expires.
 
 ### 4. GET `/users` — ADMIN
-Lists all users, newest first: `[{ id, email, role, createdAt }]`. Password hashes are never returned.
+Lists users, newest first: `[{ id, email, fullName, role, active, createdAt }]`. Password hashes are never returned.
+
+| Query | Meaning |
+|---|---|
+| `role` | `ADMINISTRATOR` or `WORKER` |
+| `active` | `true` or `false` |
+| `search` | Matches email or full name (case-insensitive) |
+
 **Errors:** 403 for a worker.
+
+### User management rules (4a–4g)
+
+* **Never deleted, only deactivated.** Sales, stock movements and audit logs point to the user,
+  so deleting one would break history.
+* **Deactivation is immediate.** A deactivated user cannot log in, and any token they already
+  hold is rejected on the next request. Role changes also apply on the next request.
+* **At least one active administrator must always remain.** The last one cannot be deactivated
+  or demoted (409).
+* **No self-lockout.** An administrator cannot deactivate their own account or change their own
+  role (400). Another administrator must do it.
+* **Password rule:** 8–72 characters with at least one letter and one number. Stored as a
+  bcrypt hash.
+* **Password changes end old sessions.** After a reset (4f) or a change (4g), tokens issued
+  earlier stop working.
+* **Everything is audited.** `audit_logs` rows have entity `USER` and action `CREATE`, `UPDATE`,
+  `CHANGE_ROLE`, `DEACTIVATE`, `ACTIVATE`, `RESET_PASSWORD` or `CHANGE_PASSWORD`.
+
+### 4a. GET `/users/:id` — ADMIN
+One user, same shape as the list. **Errors:** 404, 400 (bad UUID), 403.
+
+### 4b. POST `/users` — ADMIN
+```json
+{
+  "email": "cashier@shop.lk",
+  "fullName": "Sunil Fernando",
+  "role": "WORKER",
+  "password": "Passw0rd1"
+}
+```
+
+| Field | Rule |
+|---|---|
+| `email` | Required, valid email, unique (case-insensitive). Stored lowercased |
+| `fullName` | Required, 1–200 characters. Printed on invoices and receipts (FR7) |
+| `role` | `ADMINISTRATOR` or `WORKER` |
+| `password` | See the password rule above |
+
+**201** returns the user (no password). **Errors:** 409 duplicate email, 400 validation, 403.
+
+### 4c. PATCH `/users/:id` — ADMIN
+`{ "fullName": "…", "role": "ADMINISTRATOR" }`. Both fields are optional, but at least one is required.
+The email cannot be changed (sending it gives 400); create a new account instead.
+**Errors:** 400 (empty body, or changing your own role), 409 (demoting the last active administrator), 404.
+
+### 4d. PATCH `/users/:id/deactivate` — ADMIN
+No body. Returns the user with `"active": false`.
+**Errors:** 400 (yourself), 409 (already inactive, or the last active administrator), 404.
+
+### 4e. PATCH `/users/:id/activate` — ADMIN
+No body. Returns the user with `"active": true`. **Errors:** 409 (already active), 404.
+
+### 4f. PATCH `/users/:id/password` — ADMIN
+`{ "password": "N3wPassword" }`. Sets a new password (for example, when a worker forgets theirs),
+and the user's existing tokens stop working. **Errors:** 400, 404.
+
+### 4g. POST `/auth/change-password` — Both
+Any signed-in user changes their own password:
+```json
+{ "currentPassword": "Passw0rd1", "newPassword": "Passw0rd2" }
+```
+**200** returns the same shape as login (a fresh `accessToken`); the old token stops working.
+**Errors:** 400 (wrong current password, new password same as the current one, or too weak), 401.
 
 ---
 
