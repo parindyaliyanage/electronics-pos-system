@@ -448,6 +448,10 @@ Query: `page`, `limit`. Returns:
   "meta": { "page": 1, "limit": 20, "total": 1 }
 }
 ```
+Each `installmentPlan.schedules[]` entry includes `allocations: [{ paymentId, amountApplied }]`: what has been
+paid against that installment. A payment settles the oldest unpaid installment first, and any excess carries
+to the next one, so an installment can be part paid. A part-paid installment that was already OVERDUE keeps
+status `OVERDUE` until it is fully settled.
 Sales are newest first. `amountPaid` sums all payments on the sale (deposit + installment payments).
 For an installment sale, `totalPayable` = deposit + all scheduled installments, so it includes interest;
 `interest` = `totalPayable − grandTotal`; `outstanding` = `totalPayable − amountPaid`.

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { errorMessage } from "../../api/client";
-import { createCustomer } from "../../api/pos";
+import { createCustomer } from "../../api/customers";
 import type { CreateCustomerResult } from "../../api/types";
 import { Modal } from "../../components/Modal";
 

@@ -4,6 +4,7 @@ import { RequireAuth, RequireRole } from "./components/RequireAuth";
 import { useAuth } from "./lib/auth-context";
 import { homePath } from "./lib/session";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
+import CustomerDetailPage from "./pages/CustomerDetailPage";
 import CustomersPage from "./pages/CustomersPage";
 import InstallmentsPage from "./pages/InstallmentsPage";
 import LoginPage from "./pages/LoginPage";
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="pos" element={<PosPage />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="customers" element={<CustomersPage />} />
+        <Route path="customers/:id" element={<CustomerDetailPage />} />
         <Route path="installments" element={<InstallmentsPage />} />
         <Route path="reports" element={<RequireRole roles={[...ADMIN]}><ReportsPage /></RequireRole>} />
         <Route path="users" element={<RequireRole roles={[...ADMIN]}><UsersPage /></RequireRole>} />

@@ -109,7 +109,16 @@ export class CustomersService {
             },
           },
           payments: true,
-          installmentPlan: { include: { schedules: { orderBy: { dueDate: "asc" } } } },
+          installmentPlan: {
+            include: {
+              schedules: {
+                orderBy: { dueDate: "asc" },
+                // What has been paid against each installment, so the history
+                // can show "paid" and "still owed" per installment.
+                include: { allocations: { select: { paymentId: true, amountApplied: true } } },
+              },
+            },
+          },
           invoices: true,
         },
         orderBy: { createdAt: "desc" },
