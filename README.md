@@ -356,6 +356,17 @@ pnpm dev:worker                                   # Temporal worker in developme
 
 When running applications on the host, use `localhost` addresses instead of Docker service names.
 
+The Docker `frontend` container also uses port 5173. Stop it before starting the Vite
+development server, which gives you instant reload while you edit:
+
+```powershell
+docker compose -f infra/docker/docker-compose.yml stop frontend
+pnpm dev:frontend
+```
+
+Sign in at `http://localhost:5173` with the seeded Administrator or Worker account from `.env`.
+Administrators land on the Dashboard; Workers land on Point of Sale and only see the screens they can use.
+
 ---
 
 ## 7. Service Ports

@@ -1,26 +1,16 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import LoginPage from "./pages/LoginPage";
-import PosPage from "./pages/PosPage";
-import ProductsPage from "./pages/ProductsPage";
-import CustomersPage from "./pages/CustomersPage";
-import InstallmentsPage from "./pages/InstallmentsPage";
-import ReportsPage from "./pages/ReportsPage";
-import AdminDashboardPage from "./pages/AdminDashboardPage";
+import { BrowserRouter } from "react-router-dom";
+import App from "./App";
+import { AuthProvider } from "./lib/auth-context";
+import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/" element={<PosPage />} />
-        <Route path="/products" element={<ProductsPage />} />
-        <Route path="/customers" element={<CustomersPage />} />
-        <Route path="/installments" element={<InstallmentsPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/admin" element={<AdminDashboardPage />} />
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </AuthProvider>
   </React.StrictMode>,
 );

@@ -85,6 +85,9 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.frontend
+      args:
+        # The browser calls the API directly, so this is the host-facing URL.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
     ports:
       - "5173:80"
     depends_on:
