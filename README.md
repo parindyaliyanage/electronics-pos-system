@@ -235,6 +235,29 @@ storage on every later download. Products accept an optional `warrantyMonths`,
 which is printed with the serial/IMEI. Full reference:
 [`docs/API_Endpoints_FR7.md`](docs/API_Endpoints_FR7.md).
 
+### Reports (FR8) — Administrator only
+
+```text
+POST /reports                   Generate a SALES, INVENTORY, INSTALLMENTS or FINANCIAL report (PDF or CSV)
+GET  /reports                   Report history
+GET  /reports/:id               Status: QUEUED, GENERATING, COMPLETED, FAILED, EXPIRED
+GET  /reports/:id/download      Download the stored file
+POST /reports/:id/retry         Re-queue a FAILED or EXPIRED report
+```
+
+Reports of up to 31 days (and the Inventory report) are generated during the
+request and return 201. Longer date ranges return 202 with a QUEUED job. A
+background worker inside the backend, using the `report_jobs` table as its
+queue, builds the file. Files are stored in MinIO and served unchanged for 30
+days. Full reference: [`docs/API_Endpoints_FR8.md`](docs/API_Endpoints_FR8.md).
+
+### Admin dashboard — Administrator only
+
+```text
+GET  /dashboard/summary         Today's sales, money received, outstanding and overdue
+                                installments, low-stock items (with top-10 lists)
+```
+
 ### Customer API (FR4)
 
 ```text

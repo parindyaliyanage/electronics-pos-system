@@ -3,7 +3,7 @@ import { InvoiceType, PaymentType, UserRole } from "@prisma/client";
 import type { ConfigService } from "@nestjs/config";
 import type { AuthenticatedUser } from "../auth/auth.types";
 import type { PrismaService } from "../prisma/prisma.service";
-import type { DocumentStorageService } from "./document-storage.service";
+import type { DocumentStorageService } from "../storage/document-storage.service";
 import { InvoicesService } from "./invoices.service";
 
 const user = (role: UserRole, id: string): AuthenticatedUser => ({

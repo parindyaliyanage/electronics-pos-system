@@ -10,7 +10,7 @@ import { InvoiceType, PaymentType, Prisma, UserRole } from "@prisma/client";
 import type { AuthenticatedUser } from "../auth/auth.types";
 import { PrismaService } from "../prisma/prisma.service";
 import { nextDocumentNumber } from "./document-number";
-import { DocumentStorageService } from "./document-storage.service";
+import { DocumentStorageService } from "../storage/document-storage.service";
 import type { InvoiceQueryDto } from "./dto/invoice-query.dto";
 import { renderInvoicePdf, renderReceiptPdf } from "./invoice-pdf";
 import { buildInvoiceView, buildReceiptView, type StoreDetails } from "./invoice-view";

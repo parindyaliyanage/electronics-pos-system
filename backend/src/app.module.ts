@@ -12,6 +12,7 @@ import { InstallmentsModule } from "./installments/installments.module";
 import { WorkflowsModule } from "./workflows/workflows.module";
 import { InvoicesModule } from "./invoices/invoices.module";
 import { ReportsModule } from "./reports/reports.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
 import { AuditModule } from "./audit/audit.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
 
@@ -30,6 +31,7 @@ import { AnalyticsModule } from "./analytics/analytics.module";
     WorkflowsModule,
     InvoicesModule,
     ReportsModule,
+    DashboardModule,
     AuditModule,
     AnalyticsModule,
   ],
