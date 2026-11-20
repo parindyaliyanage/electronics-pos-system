@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { CreateSerializedUnitDto } from "./dto/create-serialized-unit.dto";
 import type { CreateStockMovementDto } from "./dto/create-stock-movement.dto";
 import type { InventoryQueryDto } from "./dto/inventory-query.dto";
+import type { SerializedUnitQueryDto } from "./dto/serialized-unit-query.dto";
 
 const POSITIVE_MOVEMENTS = new Set<StockMovementType>([
   StockMovementType.PURCHASE,
@@ -126,10 +127,11 @@ export class InventoryService {
     }
   }
 
-  async findSerializedUnits(query: InventoryQueryDto) {
+  async findSerializedUnits(query: SerializedUnitQueryDto) {
     const search = query.search?.trim();
     const where: Prisma.SerializedUnitWhereInput = {
       ...(query.productId ? { productId: query.productId } : {}),
+      ...(query.status ? { status: query.status } : {}),
       ...(search ? {
         OR: [
           { serialNumber: { contains: search, mode: "insensitive" } },
