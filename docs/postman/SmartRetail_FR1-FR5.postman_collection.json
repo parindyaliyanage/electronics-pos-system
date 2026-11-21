@@ -3655,7 +3655,12 @@
           "name": "Cancel plan - worker (403)",
           "request": {
             "method": "PATCH",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/installments/{{planId}}/cancel",
               "host": [
@@ -3676,6 +3681,15 @@
                   "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"CREATED_IN_ERROR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
           "event": [
@@ -3691,10 +3705,15 @@
           ]
         },
         {
-          "name": "Cancel plan (admin)",
+          "name": "Cancel without a reason (400)",
           "request": {
             "method": "PATCH",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/installments/{{planId}}/cancel",
               "host": [
@@ -3705,6 +3724,103 @@
                 "{{planId}}",
                 "cancel"
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Mentions reason\", () => pm.expect(JSON.stringify(pm.response.json().message)).to.include(\"reason\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel with OTHER but no note (400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/installments/{{planId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "installments",
+                "{{planId}}",
+                "cancel"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"OTHER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Mentions note\", () => pm.expect(JSON.stringify(pm.response.json().message)).to.include(\"note\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel plan (admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/installments/{{planId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "installments",
+                "{{planId}}",
+                "cancel"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"DEBT_WRITTEN_OFF\",\n  \"note\": \"Postman test: customer moved abroad\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
           "event": [
@@ -3715,7 +3831,12 @@
                 "exec": [
                   "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
-                  "pm.test(\"CANCELLED\", () => pm.expect(body.status).to.eql(\"CANCELLED\"));"
+                  "pm.test(\"CANCELLED\", () => pm.expect(body.status).to.eql(\"CANCELLED\"));",
+                  "pm.test(\"Reason and note saved\", () => {",
+                  "  pm.expect(body.cancelReason).to.eql(\"DEBT_WRITTEN_OFF\");",
+                  "  pm.expect(body.cancelNote).to.eql(\"Postman test: customer moved abroad\");",
+                  "});",
+                  "pm.test(\"Returns the plan summary\", () => pm.expect(body.summary).to.have.property(\"outstandingBalance\"));"
                 ]
               }
             }
@@ -3725,7 +3846,12 @@
           "name": "Cancel again (409)",
           "request": {
             "method": "PATCH",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/installments/{{planId}}/cancel",
               "host": [
@@ -3736,6 +3862,15 @@
                 "{{planId}}",
                 "cancel"
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"CREATED_IN_ERROR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
           "event": [

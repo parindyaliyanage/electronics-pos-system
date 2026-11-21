@@ -24,6 +24,7 @@ export const NAV_ITEMS: NavItem[] = [
   { path: "/installments", label: "Installments", icon: "installments", roles: BOTH },
   { path: "/reports", label: "Reports", icon: "reports", roles: ADMIN },
   { path: "/users", label: "Users", icon: "users", roles: ADMIN },
+  { path: "/settings", label: "Settings", icon: "settings", roles: ADMIN },
 ];
 
 export const navFor = (role: UserRole) => NAV_ITEMS.filter((item) => item.roles.includes(role));

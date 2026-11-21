@@ -9,6 +9,7 @@ import type { CreateCustomerResult, CustomerHistory, HistorySale } from "../api/
 import { Icon } from "../components/Icon";
 import { StatusBadge } from "../components/StatusBadge";
 import { saleStatus, scheduleStatus, PAYMENT_TYPE_LABEL } from "../features/customers/status";
+import { describeCancellation } from "../features/installments/plan-status";
 import { FREQUENCY_LABEL } from "../features/sales/installment-preview";
 import { METHOD_LABEL } from "../features/sales/payment";
 import { useAuth } from "../lib/auth-context";
@@ -249,12 +250,18 @@ function SaleCard({ sale }: { sale: HistorySale }) {
                 {(Number(plan.interestRate) * 100).toLocaleString("en-LK", { maximumFractionDigits: 2 })}% interest
                 {plan.cancelledAt && <span className="muted small"> · cancelled {formatDate(plan.cancelledAt)}</span>}
                 {plan.completedAt && <span className="muted small"> · completed {formatDate(plan.completedAt)}</span>}
+                {" "}<Link className="small plan-link" to={`/installments/${plan.id}`}>
+                  {plan.status === "ACTIVE" ? "Open plan / record payment →" : "Open plan →"}
+                </Link>
               </h3>
+              {plan.status === "CANCELLED" && (
+                <p className="cancel-banner small">Cancelled — reason: {describeCancellation(plan)}</p>
+              )}
               <p className="muted small plan-explain">
                 {formatCents(toCents(sale.totals.grandTotal))} − deposit {formatCents(toCents(plan.deposit))} ={" "}
                 {formatCents(toCents(sale.totals.grandTotal) - toCents(plan.deposit))} financed, + {formatCents(toCents(sale.totals.interest))} interest ={" "}
                 {formatCents(toCents(sale.totals.totalPayable) - toCents(plan.deposit))} in {plan.termCount} installments.
-                Payments settle the oldest installment first.
+                A payment is recorded against one installment; anything extra carries forward to the next ones.
               </p>
               <div className="table-wrap">
                 <table className="data-table compact">

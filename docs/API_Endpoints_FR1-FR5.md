@@ -449,8 +449,8 @@ Query: `page`, `limit`. Returns:
 }
 ```
 Each `installmentPlan.schedules[]` entry includes `allocations: [{ paymentId, amountApplied }]`: what has been
-paid against that installment. A payment settles the oldest unpaid installment first, and any excess carries
-to the next one, so an installment can be part paid. A part-paid installment that was already OVERDUE keeps
+paid against that installment. A payment is recorded against the installment given in `scheduleId`; any excess
+carries forward to the following installments (never back to earlier ones), so an installment can be part paid. A part-paid installment that was already OVERDUE keeps
 status `OVERDUE` until it is fully settled.
 Sales are newest first. `amountPaid` sums all payments on the sale (deposit + installment payments).
 For an installment sale, `totalPayable` = deposit + all scheduled installments, so it includes interest;
@@ -502,7 +502,19 @@ When nothing is outstanding on the whole plan, it becomes `COMPLETED`.
 400 `Payment exceeds the remaining scheduled balance`.
 
 ### 29. PATCH `/installments/:id/cancel` — ADMIN
-No body. Sets the plan to `CANCELLED` with `cancelledAt`. Returns the plan.
+```json
+{ "reason": "DEBT_WRITTEN_OFF", "note": "Customer moved abroad" }
+```
+| Field | Rule |
+|---|---|
+| `reason` | Required: `ITEM_RETURNED`, `DEBT_WRITTEN_OFF`, `CUSTOMER_REQUEST`, `CREATED_IN_ERROR` or `OTHER` |
+| `note` | Optional, up to 500 characters. **Required when `reason` is `OTHER`** |
+
+Sets the plan to `CANCELLED` with `cancelledAt`, `cancelReason` and `cancelNote`, writes an audit entry and stops
+the plan's reminder workflows. Nothing is deleted. Returns the plan in the same shape as `GET /installments/:id`
+(with `summary` and per-installment `amountPaid` / `outstanding`).
+Plans cancelled before reasons existed have `cancelReason: null`.
+**Errors:** 400 (missing or invalid reason, or `OTHER` without a note), 403 (worker), 404, 409 (plan not active).
 Note: it does not refund payments or return sold units to stock.
 **Errors:** 404, 409 plan not `ACTIVE`, 403 worker.
 
