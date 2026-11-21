@@ -11,8 +11,10 @@ import InstallmentsPage from "./pages/InstallmentsPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import PosPage from "./pages/PosPage";
+import ProductDetailPage from "./pages/ProductDetailPage";
 import ProductsPage from "./pages/ProductsPage";
 import ReportsPage from "./pages/ReportsPage";
+import SettingsPage from "./pages/SettingsPage";
 import UsersPage from "./pages/UsersPage";
 
 const ADMIN = ["ADMINISTRATOR"] as const;
@@ -32,12 +34,14 @@ export default function App() {
         <Route path="admin" element={<Navigate to="/dashboard" replace />} />
         <Route path="pos" element={<PosPage />} />
         <Route path="products" element={<ProductsPage />} />
+        <Route path="products/:id" element={<ProductDetailPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
         <Route path="installments" element={<InstallmentsPage />} />
         <Route path="installments/:id" element={<InstallmentDetailPage />} />
         <Route path="reports" element={<RequireRole roles={[...ADMIN]}><ReportsPage /></RequireRole>} />
         <Route path="users" element={<RequireRole roles={[...ADMIN]}><UsersPage /></RequireRole>} />
+        <Route path="settings" element={<RequireRole roles={[...ADMIN]}><SettingsPage /></RequireRole>} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

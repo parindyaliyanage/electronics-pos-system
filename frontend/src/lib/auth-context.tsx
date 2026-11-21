@@ -8,6 +8,10 @@ export type SignOutReason = "manual" | "expired";
 export interface AuthContextValue {
   user: SessionUser | null;
   signIn: (email: string, password: string) => Promise<SessionUser>;
+  /** Swaps in a fresh token (after changing your own password the old one stops working). */
+  adoptToken: (result: authApi.LoginResponse) => void;
+  /** Re-reads the signed-in user's name/role from the server. */
+  refreshUser: () => void;
   signOut: (reason?: SignOutReason) => void;
   hasRole: (...roles: UserRole[]) => boolean;
   /** Why the last session ended; the login page shows a notice for "expired". */
@@ -29,8 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSignOutReason(reason);
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    const result = await authApi.login(email, password);
+  const adoptToken = useCallback((result: authApi.LoginResponse) => {
     const user: SessionUser = {
       id: result.user.id,
       email: result.user.email,
@@ -48,6 +51,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user;
   }, []);
 
+  const signIn = useCallback(async (email: string, password: string) => {
+    return adoptToken(await authApi.login(email, password));
+  }, [adoptToken]);
+
   // The server rejected the token (expired, password changed, deactivated).
   useEffect(() => {
     setUnauthorizedHandler(() => signOut("expired"));
@@ -64,6 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // On page load, refresh the stored profile (name or role may have changed).
   // A rejected token is handled by the 401 handler above.
   const token = session?.token;
+  const [profileVersion, setProfileVersion] = useState(0);
+  const refreshUser = useCallback(() => setProfileVersion((v) => v + 1), []);
   useEffect(() => {
     if (!token) return;
     authApi.fetchMe().then((me) => {
@@ -74,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return next;
       });
     }).catch(() => undefined);
-  }, [token]);
+  }, [token, profileVersion]);
 
   // Signing out in one tab signs out every tab.
   useEffect(() => {
@@ -88,10 +97,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(() => ({
     user: session?.user ?? null,
     signIn,
+    adoptToken,
+    refreshUser,
     signOut,
     hasRole: (...roles) => !!session && roles.includes(session.user.role),
     signOutReason,
-  }), [session, signIn, signOut, signOutReason]);
+  }), [session, signIn, adoptToken, refreshUser, signOut, signOutReason]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

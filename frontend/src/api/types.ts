@@ -244,3 +244,103 @@ export interface RecordPaymentResponse {
   receipt: { id: string; invoiceNumber: string; downloadPath: string };
   plan: Plan;
 }
+
+export interface CategoryRow {
+  id: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
+  _count: { products: number };
+}
+
+export type StockMovementType = "PURCHASE" | "SALE" | "RETURN" | "DAMAGED" | "ADJUSTMENT";
+
+export interface StockMovement {
+  id: string;
+  productId: string;
+  type: StockMovementType;
+  quantity: number;
+  createdAt: string;
+  product: { id: string; name: string };
+  createdBy: { id: string; email: string; role: UserRoleName };
+}
+
+export interface ProductDetail extends Product {
+  serializedUnits?: SerializedUnit[];
+}
+
+export interface ProductInput {
+  categoryId: string;
+  name: string;
+  costPrice: number;
+  sellingPrice: number;
+  isSerialized: boolean;
+  lowStockThreshold: number;
+  warrantyMonths: number | null;
+}
+
+export type UserRoleName = "ADMINISTRATOR" | "WORKER";
+
+export interface ManagedUser {
+  id: string;
+  email: string;
+  fullName: string | null;
+  role: UserRoleName;
+  active: boolean;
+  createdAt: string;
+}
+
+export type ReportType = "SALES" | "INVENTORY" | "INSTALLMENTS" | "FINANCIAL";
+export type ReportFormat = "PDF" | "CSV";
+export type ReportStatus = "QUEUED" | "GENERATING" | "COMPLETED" | "FAILED" | "EXPIRED";
+
+export interface ReportFilters {
+  from?: string;
+  to?: string;
+  categoryId?: string;
+  cashierId?: string;
+  groupBy?: "DAY" | "MONTH";
+  stockThreshold?: number;
+  lowStockOnly?: boolean;
+  status?: "ACTIVE" | "OVERDUE" | "COMPLETED";
+  paymentMethod?: PaymentMethod;
+}
+
+export interface ReportJob {
+  id: string;
+  type: ReportType;
+  format: ReportFormat;
+  filters: ReportFilters;
+  status: ReportStatus;
+  fileName: string | null;
+  errorMessage: string | null;
+  attempts: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  requestedBy: { id: string; email: string; fullName: string | null } | null;
+  downloadPath: string | null;
+}
+
+export interface DashboardSummary {
+  date: string;
+  timeZone: string;
+  generatedAt: string;
+  todaySales: { count: number; units: number; netRevenue: string; averageSale: string };
+  receivedToday: { total: string; byMethod: Record<PaymentMethod, string> };
+  installments: { activePlans: number; outstandingBalance: string; overdueInstallments: number; overdueAmount: string; overdueCustomers: number };
+  lowStock: { count: number; items: Array<{ productId: string; name: string; category: string; stock: number; threshold: number; shortBy: number }> };
+  overdue: {
+    count: number;
+    items: Array<{
+      scheduleId: string; planId: string; customer: { id: string; fullName: string; phone: string };
+      dueDate: string; daysOverdue: number; amount: string; paid: string; outstanding: string;
+    }>;
+  };
+}
+
+export interface PolicyDetail extends InstallmentPolicy {
+  updatedAt: string;
+  updatedBy: { id: string; email: string } | null;
+}

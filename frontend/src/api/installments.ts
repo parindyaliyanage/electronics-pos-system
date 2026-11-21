@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { CancelReason, OverdueItem, Page, PaymentMethod, Plan, PlanStatus, ReceiptListItem, RecordPaymentResponse, ReminderRecord } from "./types";
+import type { CancelReason, OverdueItem, PolicyDetail, Page, PaymentMethod, Plan, PlanStatus, ReceiptListItem, RecordPaymentResponse, ReminderRecord } from "./types";
 
 export async function listPlans(params: { status?: PlanStatus; customerId?: string; page: number; limit: number }, signal?: AbortSignal) {
   const { data } = await apiClient.get<Page<Plan>>("/installments", { params, signal });
@@ -47,5 +47,16 @@ export async function cancelPlan(id: string, body: { reason: CancelReason; note?
 
 export async function fetchReceipt(paymentId: string) {
   const { data } = await apiClient.get<Blob>(`/payments/${paymentId}/receipt`, { responseType: "blob" });
+  return data;
+}
+
+export async function getPolicyDetail() {
+  const { data } = await apiClient.get<PolicyDetail>("/installments/policy");
+  return data;
+}
+
+/** Administrator only. interestRate is a fraction (0.10 = 10%). */
+export async function updatePolicy(input: { interestRate: number; reminderDaysBefore: number; gracePeriodDays: number }) {
+  const { data } = await apiClient.put<PolicyDetail>("/installments/policy", input);
   return data;
 }

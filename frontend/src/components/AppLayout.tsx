@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ChangePasswordDialog } from "../features/users/ChangePasswordDialog";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth-context";
 import { APP_NAME } from "../lib/constants";
@@ -12,6 +13,7 @@ export function AppLayout() {
   const { user, signOut } = useAuth();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   // Close the mobile menu after navigating.
   useEffect(() => setMenuOpen(false), [location.pathname]);
@@ -57,6 +59,9 @@ export function AppLayout() {
               <span className="user-name">{name}</span>
               <span className="user-role">{roleLabel(user.role)}</span>
             </span>
+            <button type="button" className="icon-button" title="Change password" aria-label="Change password" onClick={() => setChangingPassword(true)}>
+              <Icon name="key" size={18} />
+            </button>
             <button type="button" className="button button-ghost" onClick={() => signOut()}>
               <Icon name="logout" size={18} />
               <span>Sign out</span>
@@ -66,6 +71,7 @@ export function AppLayout() {
         <main className="content">
           <Outlet />
         </main>
+        {changingPassword && <ChangePasswordDialog onClose={() => setChangingPassword(false)} />}
       </div>
     </div>
   );
