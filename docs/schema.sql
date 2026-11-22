@@ -62,6 +62,14 @@ CREATE TYPE installment_plan_status AS ENUM (
     'CANCELLED'
 );
 
+CREATE TYPE installment_cancel_reason AS ENUM (
+    'ITEM_RETURNED',
+    'DEBT_WRITTEN_OFF',
+    'CUSTOMER_REQUEST',
+    'CREATED_IN_ERROR',
+    'OTHER'
+);
+
 CREATE TYPE installment_schedule_status AS ENUM (
     'PENDING',
     'PARTIALLY_PAID',
@@ -446,7 +454,14 @@ CREATE TABLE installment_plans (
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     completed_at        TIMESTAMPTZ,
-    cancelled_at        TIMESTAMPTZ
+    cancelled_at        TIMESTAMPTZ,
+
+    -- Why an Administrator cancelled the plan (NULL for plans cancelled before this was recorded).
+    cancel_reason       installment_cancel_reason,
+    cancel_note         VARCHAR(500),
+
+    CONSTRAINT chk_installment_plans_cancel_reason
+        CHECK ((cancel_reason IS NULL AND cancel_note IS NULL) OR status = 'CANCELLED')
 );
 
 CREATE INDEX idx_installment_plans_status
